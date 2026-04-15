@@ -1,135 +1,187 @@
 #!/usr/bin/env node
 import chalk from 'chalk';
 import ora from 'ora';
-import { input, password, confirm } from '@inquirer/prompts';
+import gradient from 'gradient-string';
+import figlet from 'figlet';
+import * as p from '@clack/prompts';
 import { loginAndScan, runSubmissions } from './bot.js';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Utils ─────────────────────────────────────────────────────────────────────
+const figletAsync = (text, opts) =>
+  new Promise((res, rej) =>
+    figlet.text(text, opts, (err, out) => (err ? rej(err) : res(out)))
+  );
+
 const stripAnsi = s => s.replace(/\x1B\[[0-9;]*m/g, '');
-const pad = (s, n) => s + ' '.repeat(Math.max(0, n - stripAnsi(s).length));
+const pad = (str, len) => str + ' '.repeat(Math.max(0, len - stripAnsi(str).length));
 
-function box(lines, color = 'cyan') {
-  const width = Math.max(...lines.map(l => stripAnsi(l).length)) + 4;
-  const c = chalk[color].bold;
-  const hr = '═'.repeat(width);
-  const output = [c(`╔${hr}╗`)];
-  for (const line of lines) {
-    const raw = stripAnsi(line);
-    const trail = width - raw.length - 2;
-    output.push(c('║') + '  ' + line + ' '.repeat(Math.max(0, trail)) + c('║'));
-  }
-  output.push(c(`╚${hr}╝`));
-  return output.join('\n');
-}
-
-function progressBar(done, total, width = 30) {
+function progressBar(done, total, width = 20) {
   const pct = total > 0 ? done / total : 0;
   const filled = Math.round(pct * width);
-  return chalk.green('█'.repeat(filled)) + chalk.dim('░'.repeat(width - filled));
+  return chalk.cyan('█'.repeat(filled)) + chalk.dim('░'.repeat(width - filled));
 }
+const percent = (d, t) => (t > 0 ? Math.round((d / t) * 100) : 0);
 
-// ── Banner ────────────────────────────────────────────────────────────────────
-process.stdout.write('\x1Bc'); // clear terminal
+// ── Banner ───────────────────────────────────────────────────────────────
+process.stdout.write('\x1Bc');
 
-console.log(chalk.cyan.bold(`
-╔══════════════════════════════════════════════════════╗
-║                                                      ║
-║          🎓  ADAMAS FEEDBACK BOT  v1.0.0             ║
-║              adamasknowledgecity.ac.in               ║
-║                                                      ║
-║      Auto-submit all pending academic feedback       ║
-║                                                      ║
-╚══════════════════════════════════════════════════════╝`));
+const ascii = await figletAsync('FEEDBACK BOT', { font: 'ANSI Shadow' });
+console.log(gradient(['#06B6D4', '#818CF8', '#EC4899'])(ascii));
 
-console.log('\n' + chalk.dim('  ⓘ  Your credentials stay on your machine and are never sent anywhere.\n'));
+console.log(
+  '  ' +
+  chalk.cyan('◆') +
+  chalk.white.bold('  Adamas University') +
+  chalk.dim('  ·  Academic Feedback Automation  ·  v1.0.0')
+);
+console.log(
+  '  ' +
+  chalk.cyan('◆') +
+  chalk.dim('  © Abhishek Singh  ·  ') +
+  chalk.cyan.underline('https://github.com/AbhishekS04')
+);
+console.log();
+console.log(chalk.dim('  ' + '─'.repeat(58)));
+console.log();
 
-// ── Collect Credentials ───────────────────────────────────────────────────────
-let studentId, pass;
-try {
-  studentId = await input({
-    message: chalk.bold('Student ID'),
-    required: true,
-    validate: v => v.trim().length > 0 || 'Student ID is required',
-  });
-
-  pass = await password({
-    message: chalk.bold('Password'),
-    mask: '•',
-    validate: v => v.length > 0 || 'Password is required',
-  });
-} catch {
-  console.log('\n' + chalk.yellow('  Cancelled. Goodbye! 👋\n'));
-  process.exit(0);
+// ── Disclaimer ───────────────────────────────────────────────────────────────
+const D = '─'.repeat(58);
+console.log('  ' + chalk.yellow('┌' + D + '┐'));
+console.log('  ' + chalk.yellow('│') + pad(chalk.yellow.bold('  ⚠  DISCLAIMER — read before you ride, partner'), 58) + chalk.yellow('│'));
+console.log('  ' + chalk.yellow('├' + D + '┤'));
+const disclaimerLines = [
+  chalk.white('  This tool exists ONLY to help submit academic'),
+  chalk.white('  feedback on the Adamas University portal.'),
+  '',
+  chalk.dim('  • Use it on YOUR OWN account. Not your crush\'s.'),
+  chalk.dim('  • The maker (Abhishek Singh) is not responsible'),
+  chalk.dim('    if you do something chaotic with it. At all.'),
+  chalk.dim('  • Seriously. Don\'t be that guy.'),
+  '',
+  chalk.cyan('  Ride responsibly. 🤠'),
+];
+for (const line of disclaimerLines) {
+  console.log('  ' + chalk.yellow('│') + pad(line, 58) + chalk.yellow('│'));
 }
+console.log('  ' + chalk.yellow('└' + D + '┘'));
+console.log();
+
+// ── Credentials ───────────────────────────────────────────────────────────────
+p.intro(chalk.bgCyan.black.bold('  FEEDBACK BOT  '));
+
+console.log(chalk.dim('\n  Your credentials never leave your machine.\n'));
+
+const creds = await p.group(
+  {
+    studentId: () =>
+      p.text({
+        message: 'Student ID',
+        placeholder: 'AU/XXXX/XXXXXXX',
+        validate: v => (!v.trim() ? 'Required' : undefined),
+      }),
+    pass: () =>
+      p.password({
+        message: 'Password',
+        validate: v => (!v ? 'Required' : undefined),
+      }),
+  },
+  {
+    onCancel: () => {
+      p.cancel(chalk.yellow('Cancelled. Goodbye! 👋'));
+      process.exit(0);
+    },
+  }
+);
 
 console.log();
 
 // ── Login + Scan ──────────────────────────────────────────────────────────────
-let session;
-const loginSpinner = ora({ text: chalk.cyan('Connecting to ADAMAS portal...'), color: 'cyan' }).start();
+const clackSpinner = p.spinner();
+clackSpinner.start(chalk.cyan('Connecting to ADAMAS portal...'));
 
+let session;
 try {
   session = await loginAndScan({
-    studentId: studentId.trim(),
-    password: pass,
+    studentId: creds.studentId.trim().toUpperCase(),
+    password: creds.pass,
     headless: false,
-    onStatus: msg => { loginSpinner.text = chalk.cyan(msg); },
+    onStatus: msg => clackSpinner.message(chalk.cyan(msg)),
   });
 } catch (err) {
-  loginSpinner.fail(chalk.red('  ' + err.message));
-  console.log(chalk.dim('\n  Double-check your Student ID and Password and try again.\n'));
+  clackSpinner.stop(chalk.red('✖  ' + err.message));
+  console.log(chalk.dim('\n  Check your credentials and try again.\n'));
   process.exit(1);
 }
 
-loginSpinner.succeed(chalk.green('Connected to ADAMAS portal'));
+clackSpinner.stop(chalk.green('✔  Connected to ADAMAS portal'));
 console.log();
 
-// ── Pending Summary ───────────────────────────────────────────────────────────
+// ── Subject Overview Table ────────────────────────────────────────────────────
 const { browser, page, subjects } = session;
 const totalPending = subjects.reduce((acc, s) => acc + Math.max(0, s.total - s.done), 0);
 
-const tableLines = subjects.map(s => {
-  const pending = s.total - s.done;
-  const name = pad(s.name.substring(0, 34), 35);
-  const status = pending <= 0
-    ? chalk.green('✔ All done')
-    : chalk.yellow(`${s.done}/${s.total}`) + chalk.dim(` · `) + chalk.bold(`${pending} pending`);
-  return name + status;
-});
+// Table header
+const LINE = '─'.repeat(64);
+console.log('  ' + chalk.cyan('┌' + LINE + '┐'));
+console.log(
+  '  ' + chalk.cyan('│') +
+  '  ' + chalk.bold.white('SUBJECT OVERVIEW') +
+  ' '.repeat(64 - 18) +
+  chalk.cyan('│')
+);
+console.log('  ' + chalk.cyan('├' + LINE + '┤'));
 
-tableLines.push(''); // spacer
-if (totalPending === 0) {
-  tableLines.push(chalk.green.bold('✅  All feedback already submitted!'));
-} else {
-  tableLines.push(
-    chalk.dim('Total pending:  ') + chalk.yellow.bold(totalPending + ' feedbacks')
-  );
+// Column headers
+const colHeaders = chalk.dim(pad('Subject', 34) + pad('Progress', 22) + 'Status');
+console.log('  ' + chalk.cyan('│') + '  ' + pad(colHeaders, 62) + chalk.cyan('│'));
+console.log('  ' + chalk.cyan('├' + LINE + '┤'));
+
+for (const s of subjects) {
+  const pending = s.total - s.done;
+  const name = pad(s.name.length > 32 ? s.name.substring(0, 29) + '...' : s.name, 34);
+  const b = progressBar(s.done, s.total, 14);
+  const info = chalk.dim(`${s.done}/${s.total}`);
+  const barCol = b + ' ' + info;
+
+  let status;
+  if (pending <= 0) {
+    status = chalk.green('✓ done');
+  } else {
+    status = chalk.yellow.bold(pending + ' left');
+  }
+
+  const rowContent = chalk.white(name) + pad(barCol, 22) + status;
+  console.log('  ' + chalk.cyan('│') + '  ' + pad(rowContent, 62) + chalk.cyan('│'));
 }
 
-console.log(box(
-  [chalk.bold.white('PENDING FEEDBACK SUMMARY'), '', ...tableLines],
-  'cyan'
-));
-console.log();
+console.log('  ' + chalk.cyan('├' + LINE + '┤'));
 
 if (totalPending === 0) {
+  const msg = '  ✓  All feedback already submitted!';
+  console.log('  ' + chalk.cyan('│') + chalk.green(msg) + ' '.repeat(64 - msg.length) + chalk.cyan('│'));
+  console.log('  ' + chalk.cyan('└' + LINE + '┘\n'));
   await browser.close();
   process.exit(0);
 }
 
-// ── Confirm ───────────────────────────────────────────────────────────────────
-let go;
-try {
-  go = await confirm({
-    message: chalk.bold(`Start submitting ${chalk.yellow(totalPending)} feedbacks now?`),
-    default: true,
-  });
-} catch {
-  go = false;
-}
+const summaryLeft = chalk.dim('  Total pending  ');
+const summaryRight = chalk.yellow.bold(totalPending + ' feedbacks');
+const summaryRaw = '  Total pending  ' + totalPending + ' feedbacks';
+console.log(
+  '  ' + chalk.cyan('│') + summaryLeft + summaryRight +
+  ' '.repeat(Math.max(0, 64 - summaryRaw.length)) + chalk.cyan('│')
+);
+console.log('  ' + chalk.cyan('└' + LINE + '┘'));
+console.log();
 
-if (!go) {
-  console.log('\n' + chalk.yellow('  Cancelled. Run again whenever you\'re ready. 👋\n'));
+// ── Confirm ───────────────────────────────────────────────────────────────────
+const go = await p.confirm({
+  message: chalk.white(`Submit all ${chalk.yellow.bold(totalPending + '')} pending feedbacks now?`),
+  initialValue: true,
+});
+
+if (p.isCancel(go) || !go) {
+  p.cancel(chalk.yellow('Cancelled. Run again whenever you\'re ready.'));
   await browser.close();
   process.exit(0);
 }
@@ -138,18 +190,18 @@ console.log();
 
 // ── Live Submission Progress ──────────────────────────────────────────────────
 let submitted = 0;
-let failed    = 0;
-let spinner   = ora({ color: 'cyan', indent: 2 }).start();
+let failed = 0;
+const cookedSubjects = [];
+const skippedSubjects = [];
+let spinner = ora({ color: 'cyan', indent: 2 }).start();
 
-function liveBar(subject) {
-  const bar  = progressBar(submitted, totalPending);
-  const pct  = totalPending > 0 ? Math.round((submitted / totalPending) * 100) : 0;
-  const name = chalk.bold.cyan((subject || '').substring(0, 28));
-  return (
-    `${name}  [${bar}] ${chalk.dim(pct + '%')}  ` +
-    chalk.green(`${submitted}✓`) +
-    (failed ? chalk.red(`  ${failed}✗`) : '')
-  );
+function liveStatus(subject, date) {
+  const b = progressBar(submitted, totalPending, 20);
+  const pct = chalk.dim(percent(submitted, totalPending) + '%');
+  const nm = chalk.cyan.bold((subject || '').substring(0, 26).padEnd(26));
+  const cnt = chalk.green(submitted + '✓') + (failed ? chalk.red('  ' + failed + '✗') : '');
+  const dt = date ? chalk.dim('  ' + date) : '';
+  return `${nm}  [${b}]  ${pct}  ${cnt}${dt}`;
 }
 
 await runSubmissions({
@@ -159,41 +211,48 @@ await runSubmissions({
     switch (ev.type) {
 
       case 'pass':
-        spinner.text = chalk.dim(`  Scanning dashboard — pass ${ev.n}...`);
+        spinner.text = chalk.dim(`Scanning dashboard — pass ${ev.n}...`);
         break;
 
       case 'subject_start':
-        spinner.text = chalk.bold.cyan(`  ${ev.name}`) + chalk.dim(` — loading feedbacks (${ev.done}/${ev.total})...`);
+        spinner.text =
+          chalk.cyan.bold(ev.name) +
+          chalk.dim(`  (${ev.done}/${ev.total}) — loading feedbacks...`);
         break;
 
       case 'feedback_start':
-        spinner.text = liveBar(ev.subject) + (ev.date ? chalk.dim(`  ${ev.date}`) : '');
+        spinner.text = liveStatus(ev.subject, ev.date);
         break;
 
       case 'feedback_success':
         submitted++;
-        spinner.text = liveBar(ev.subject) + chalk.dim(ev.date ? `  ${ev.date}` : '');
+        spinner.text = liveStatus(ev.subject, ev.date);
         break;
 
       case 'feedback_fail':
         failed++;
-        spinner.text = liveBar(ev.subject) + chalk.red(`  ✗ ${ev.error.substring(0, 45)}`);
+        spinner.text = liveStatus(ev.subject, '') + chalk.red(`  ✗ ${ev.error.substring(0, 35)}`);
         break;
 
       case 'subject_done':
+        cookedSubjects.push(ev.name);
         spinner.stopAndPersist({
           symbol: chalk.green('  ✔'),
-          text: chalk.bold(ev.name) + '  ' + chalk.green(`${ev.submitted} submitted`) +
-                (ev.failed ? chalk.red(` · ${ev.failed} failed`) : '') +
-                `  [${progressBar(submitted, totalPending, 20)}] ${submitted}/${totalPending}`,
+          text:
+            chalk.white(ev.name.substring(0, 30).padEnd(30)) + '  ' +
+            `[${progressBar(submitted, totalPending, 18)}]  ` +
+            chalk.green(`${ev.submitted}✓`) +
+            (ev.failed ? chalk.red(`  ${ev.failed}✗`) : '') +
+            chalk.dim(`  ${percent(submitted, totalPending)}%`),
         });
         spinner = ora({ color: 'cyan', indent: 2 }).start();
         break;
 
       case 'subject_skip':
+        skippedSubjects.push(ev.name);
         spinner.stopAndPersist({
           symbol: chalk.yellow('  ⏭'),
-          text:   chalk.bold(ev.name) + '  ' + chalk.yellow('skipped — too many consecutive errors'),
+          text: chalk.dim(ev.name + ' — skipped (too many errors)'),
         });
         spinner = ora({ color: 'cyan', indent: 2 }).start();
         break;
@@ -207,17 +266,77 @@ await runSubmissions({
 
 // ── Final Summary ─────────────────────────────────────────────────────────────
 console.log();
-console.log(box([
-  chalk.bold.white('🏁  FINISHED'),
-  '',
-  chalk.green(`✅  ${submitted} form(s) submitted successfully`),
-  chalk.red(`❌  ${failed} form(s) failed`),
-  ...(submitted + failed < totalPending
-    ? [chalk.yellow(`⚠   ${totalPending - submitted - failed} feedback(s) could not be reached`)]
-    : []),
-  '',
-  chalk.dim('Thanks for using feedback-au 🎓'),
-], 'cyan'));
+console.log(gradient(['#06B6D4', '#6366F1', '#EC4899'])('  ' + '━'.repeat(56)));
+console.log();
+
+const completionPct = percent(submitted, totalPending);
+
+if (submitted === totalPending) {
+  console.log('  ' + chalk.green.bold('🎉  All done! Every feedback submitted.'));
+} else {
+  console.log('  ' + chalk.white.bold('🏁  Finished!'));
+}
 
 console.log();
+if (cookedSubjects.length > 0) {
+  console.log(`  ${chalk.green('✓')}  ${chalk.white.bold('You and I cooked and successfully submitted:')}`);
+  for (const s of cookedSubjects) console.log(`      ${chalk.dim('• ' + s)}`);
+  console.log();
+}
+
+if (skippedSubjects.length > 0) {
+  console.log(`  ${chalk.red('✗')}  ${chalk.yellow.bold('These subjects caused an error! Try manually or leave it:')}`);
+  for (const s of skippedSubjects) console.log(`      ${chalk.dim('• ' + s)}`);
+  console.log();
+}
+
+const missed = totalPending - submitted - failed;
+if (missed > 0) {
+  console.log(`  ${chalk.yellow('⚠')}  ${chalk.yellow.dim(missed + " feedback(s) couldn't be reached (skipped unknown).")}`);
+}
+
+// ── Cowboy jokes ─────────────────────────────────────────────────────────────
+console.log();
+console.log('  ' + chalk.dim('─'.repeat(56)));
+console.log();
+
+const jokes100 = [
+  ['"Every. Single. One."', "You submitted all of 'em, partner. Even Arthur Morgan", 'would tip his hat. You ride free tonight.', 'Attendance? Safe. Professors? Pleased. You? Legendary.'],
+  ['"Fastest click in the West."', 'Perfect score. Not a single feedback left behind.', "You've earned a drink at the saloon. Yeee-haw!", ''],
+  ['"A true legend of the plains."', 'You left no survivors. Every portal checked, every form filled.', "You're officially the baddest cowboy in the university.", '']
+];
+const jokes65 = [
+  ['"Above 65, pardner. You might just make it."', "Your feedback's cleaner than Dutch's plans — and those", "actually worked... mostly. You're safe. Probably.", "Don't push your luck, boy. Submit the rest next time."],
+  ['"You survived the shootout."', 'You cleared the minimum passing grade. A true survivor.', 'Keep your head down and stay out of trouble.', ''],
+  ['"Alive for another day."', 'Above 65. You might just make it out of here without', 'a bounty on your head! Rest easy, for now.', '']
+];
+const jokes0 = [
+  ['"Below 65. That ain\'t good, son."', 'Even Micah Bell showed up more than this, and nobody', 'liked Micah. Go talk to your professors. Now.', "I'm serious. This horse won't carry you through exams."],
+  ['"You\'re playing a dangerous game."', 'Below 65? Your horse is gonna need to run real fast', 'when the results come out.', ''],
+  ['"Dead man walking."', "This ain't looking good, partner. You might want", 'to sleep with one eye open.', '']
+];
+const jokesNone = [
+  ['"...You submitted nothing?"', "I've seen men walk into the O'Driscoll camp with better", 'odds than your attendance right now. Good luck, partner.', "(Please run the tool again. It'll help. I promise.)"],
+  ['"A brave fool... or just a fool."', "You submitted absolutely nothing? You're walking", 'straight into an ambush without a gun.', ''],
+  ['"Are you even enrolled?"', "Because your feedback score says you're a ghost in", 'these parts. Good luck explaining that to the sheriff.', '']
+];
+
+const getJoke = (arr) => arr[Math.floor(Math.random() * arr.length)];
+let joke = completionPct === 100 ? getJoke(jokes100) : completionPct >= 65 ? getJoke(jokes65) : completionPct > 0 ? getJoke(jokes0) : getJoke(jokesNone);
+
+console.log('  ' + chalk.yellow('🤠') + chalk.magenta.bold(' ' + joke[0]));
+console.log();
+console.log(chalk.dim.italic('     ' + joke[1]));
+console.log(chalk.dim.italic('     ' + joke[2]));
+if (joke[3]) console.log(chalk.blue('     ' + joke[3]));
+
+
+
+
+console.log();
+console.log(gradient(['#06B6D4', '#6366F1', '#EC4899'])('  ' + '━'.repeat(56)));
+console.log();
+
+console.log('  ' + chalk.dim('© Abhishek Singh  ·  ') + chalk.cyan.underline('github.com/AbhishekS04'));
+
 await browser.close();

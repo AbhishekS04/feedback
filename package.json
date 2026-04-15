@@ -1,6 +1,6 @@
 {
   "name": "feedback-au",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Auto-submit ADAMAS University academic feedback from the terminal",
   "type": "module",
   "bin": {
@@ -11,15 +11,23 @@
     "postinstall": "playwright install chromium"
   },
   "dependencies": {
+    "@clack/prompts": "^1.2.0",
     "@inquirer/prompts": "^5.5.0",
     "chalk": "^5.3.0",
+    "figlet": "^1.11.0",
+    "gradient-string": "^3.0.0",
     "ora": "^8.1.0",
     "playwright": "^1.44.0"
   },
   "engines": {
     "node": ">=18.0.0"
   },
-  "keywords": ["adamas", "university", "feedback", "automation"],
+  "keywords": [
+    "adamas",
+    "university",
+    "feedback",
+    "automation"
+  ],
   "license": "MIT",
   "publishConfig": {
     "access": "public"
