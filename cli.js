@@ -5,7 +5,10 @@ import gradient from 'gradient-string';
 import figlet from 'figlet';
 import * as p from '@clack/prompts';
 import { loginAndScan, runSubmissions } from './bot.js';
+import fs from 'fs';
 
+const pkgInfo = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url)));
+const cliVersion = pkgInfo.version;
 // ── Utils ─────────────────────────────────────────────────────────────────────
 const figletAsync = (text, opts) =>
   new Promise((res, rej) =>
@@ -32,7 +35,7 @@ console.log(
   '  ' +
   chalk.cyan('◆') +
   chalk.white.bold('  Adamas University') +
-  chalk.dim('  ·  Academic Feedback Automation  ·  v1.0.0')
+  chalk.dim(`  ·  Academic Feedback Automation  ·  v${cliVersion}`)
 );
 console.log(
   '  ' +
