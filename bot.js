@@ -1,4 +1,6 @@
 import { chromium } from 'playwright';
+import os from 'os';
+import { execSync } from 'child_process';
 
 const LOGIN_URL     = 'https://adamasknowledgecity.ac.in/student/login';
 const DASHBOARD_URL = 'https://adamasknowledgecity.ac.in/student/dashboard';
@@ -72,7 +74,17 @@ async function fillAndSubmitForm(page) {
 // ─────────────────────────────────────────────────────────────────────────────
 export async function loginAndScan({ studentId, password, headless = false, onStatus = () => {} }) {
   onStatus('Launching browser...');
-  const browser = await chromium.launch({ headless, slowMo: 20 });
+  const launchOptions = { headless, slowMo: 20 };
+  
+  if (os.platform() === 'android') {
+    try {
+      launchOptions.executablePath = execSync('which chromium').toString().trim();
+    } catch (e) {
+      launchOptions.executablePath = '/data/data/com.termux/files/usr/bin/chromium';
+    }
+  }
+
+  const browser = await chromium.launch(launchOptions);
   const context = await browser.newContext();
   const page    = await context.newPage();
 

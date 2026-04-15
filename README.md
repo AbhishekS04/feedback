@@ -80,8 +80,15 @@ Once that finishes downloading, run `npx feedback-au` again!
 <summary>📱 <b>For Android Users (Termux)</b></summary>
 
 ```bash
+# 1. Update and install required packages including Chromium
 pkg update && pkg upgrade -y
-pkg install nodejs-lts git -y
+pkg install x11-repo -y
+pkg install chromium nodejs-lts git -y
+
+# 2. Tell Playwright NOT to download its broken browser (saves 150MB!)
+export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+# 3. Run the bot
 npx feedback-au
 ```
 </details>
