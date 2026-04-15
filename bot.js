@@ -265,8 +265,8 @@ export async function runSubmissions({ browser, page, vibe = 'good', onEvent = (
         if (!page.url().includes('give-feedback')) {
           throw new Error(`Redirected away: ${page.url()}`);
         }
-
-        await fillAndSubmitForm(page, vibe);
+        const currentVibe = typeof vibe === 'object' ? (vibe[baseName] || 'good') : vibe;
+        await fillAndSubmitForm(page, currentVibe);
         totalSuccess++;
         subjectSuccess++;
         subjectFailCount[baseName] = 0;

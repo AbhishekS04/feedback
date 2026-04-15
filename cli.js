@@ -12,6 +12,18 @@ import path from 'path';
 const pkgInfo = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url)));
 const cliVersion = pkgInfo.version;
 
+const helpMode = process.argv.includes('--help') || process.argv.includes('-h');
+if (helpMode) {
+  console.log(chalk.cyan.bold('\n◆ feedback-au ') + chalk.dim(`v${cliVersion}`));
+  console.log(chalk.white('\nUsage: ') + chalk.yellow('npx feedback-au [options]'));
+  
+  console.log(chalk.white.bold('\nOptions:'));
+  console.log(`  ${chalk.cyan('--watch')}        Run the browser visibly (headed mode)`);
+  console.log(`  ${chalk.cyan('--status')}       View your lifetime stats graphical dashboard`);
+  console.log(`  ${chalk.cyan('--help, -h')}     Show this help message\n`);
+  process.exit(0);
+}
+
 // Watch mode detection
 const isWatchMode = process.argv.includes('--watch') || process.argv.includes('--show');
 const headlessMode = !isWatchMode;
@@ -232,17 +244,29 @@ if (!creds) {
   }
 }
 
-// ── Vibe Check ───────────────────────────────────────────────────────────────────
+// ── Execution Mode ───────────────────────────────────────────────────────────────────
 console.log();
-const vibeStr = await p.select({
-  message: 'What\'s the vibe today?',
+const executionMode = await p.select({
+  message: 'How do you want to assign ratings today?',
   options: [
-    { value: 'good', label: '😇 Good Boy', hint: 'Max positive ratings' },
-    { value: 'neutral', label: '😐 Meh', hint: 'Average 50% ratings' },
-    { value: 'bad', label: '👿 I Chose Violence', hint: 'Min negative ratings' }
+    { value: 'bulk', label: '🌎 Global Vibe', hint: 'Apply one rating to all subjects' },
+    { value: 'sniper', label: '🎯 Sniper Mode', hint: 'Handpick ratings for each subject' }
   ]
 });
-if (p.isCancel(vibeStr)) { p.cancel('Cancelled.'); process.exit(0); }
+if (p.isCancel(executionMode)) { p.cancel('Cancelled.'); process.exit(0); }
+
+let globalVibeStr = 'good';
+if (executionMode === 'bulk') {
+  globalVibeStr = await p.select({
+    message: 'What\'s the global vibe today?',
+    options: [
+      { value: 'good', label: '😇 Good Boy', hint: 'Max positive ratings' },
+      { value: 'neutral', label: '😐 Meh', hint: 'Average 50% ratings' },
+      { value: 'bad', label: '👿 I Chose Violence', hint: 'Min negative ratings' }
+    ]
+  });
+  if (p.isCancel(globalVibeStr)) { p.cancel('Cancelled.'); process.exit(0); }
+}
 
 console.log();
 
@@ -325,19 +349,45 @@ console.log(
 console.log('  ' + chalk.cyan('└' + LINE + '┘'));
 console.log();
 
-// ── Confirm ───────────────────────────────────────────────────────────────────
-const go = await p.confirm({
-  message: chalk.white(`Submit all ${chalk.yellow.bold(totalPending + '')} pending feedbacks now?`),
-  initialValue: true,
-});
+// ── Sniper Mode Selection ───────────────────────────────────────────────────────
+let finalVibeConfig = globalVibeStr;
 
-if (p.isCancel(go) || !go) {
-  p.cancel(chalk.yellow('Cancelled. Run again whenever you\'re ready.'));
-  await browser.close();
-  process.exit(0);
+if (executionMode === 'sniper') {
+  console.log('  ' + chalk.magenta.bold('🎯 Sniper Mode Activated'));
+  console.log('  ' + chalk.dim('Choose the vibe for each pending subject below:\n'));
+  
+  const vibeMap = {};
+  for (const s of subjects) {
+    const pending = s.total - s.done;
+    if (pending > 0) {
+      const v = await p.select({
+        message: `${chalk.cyan('➜')} ${chalk.white.bold(s.name)} ${chalk.dim(`(${pending} pending)`)}`,
+        options: [
+          { value: 'good', label: '😇 Good Boy', hint: 'Max ratings' },
+          { value: 'neutral', label: '😐 Meh', hint: 'Average ratings' },
+          { value: 'bad', label: '👿 I Chose Violence', hint: 'Min ratings' }
+        ]
+      });
+      if (p.isCancel(v)) { p.cancel('Cancelled.'); await browser.close(); process.exit(0); }
+      vibeMap[s.name] = v;
+    }
+  }
+  finalVibeConfig = vibeMap;
+  console.log();
+} else {
+  // ── Confirm (Only for Bulk) ─────────────
+  const go = await p.confirm({
+    message: chalk.white(`Submit all ${chalk.yellow.bold(totalPending + '')} pending feedbacks now?`),
+    initialValue: true,
+  });
+
+  if (p.isCancel(go) || !go) {
+    p.cancel(chalk.yellow('Cancelled. Run again whenever you\'re ready.'));
+    await browser.close();
+    process.exit(0);
+  }
+  console.log();
 }
-
-console.log();
 
 // ── Live Submission Progress ──────────────────────────────────────────────────
 let submitted = 0;
@@ -358,7 +408,7 @@ function liveStatus(subject, date) {
 await runSubmissions({
   browser,
   page,
-  vibe: vibeStr,
+  vibe: finalVibeConfig,
   onEvent(ev) {
     switch (ev.type) {
 
@@ -490,8 +540,12 @@ try {
 
 ds.totalRuns += 1;
 ds.totalSubmitted += submitted;
-if (vibeStr && ds.vibes[vibeStr] !== undefined) {
-    ds.vibes[vibeStr] += 1;
+if (executionMode === 'bulk' && ds.vibes[globalVibeStr] !== undefined) {
+    ds.vibes[globalVibeStr] += 1;
+} else if (executionMode === 'sniper') {
+    // If sniper, pick the most common vibe or count them all? We'll just count them proportional or skip.
+    // Easiest is to add to the first vibe found, or split it. We'll add 1 to 'neutral' to denote a mixed run.
+    ds.vibes['neutral'] += 1;
 }
 
 try {
