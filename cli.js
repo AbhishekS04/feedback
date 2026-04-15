@@ -24,6 +24,54 @@ const figletAsync = (text, opts) =>
 const stripAnsi = s => s.replace(/\x1B\[[0-9;]*m/g, '');
 const pad = (str, len) => str + ' '.repeat(Math.max(0, len - stripAnsi(str).length));
 
+// Analytics mode detection
+const isAnalyticsMode = process.argv.includes('--status');
+const statsPath = path.join(os.homedir(), '.feedback-au-stats.json');
+
+if (isAnalyticsMode) {
+  process.stdout.write('\x1Bc');
+  const ascii = await figletAsync('LIFETIME STATS', { font: 'ANSI Shadow' });
+  console.log(gradient(['#EC4899', '#8B5CF6', '#06B6D4'])(ascii));
+  console.log();
+
+  let stats = { totalSubmitted: 0, totalRuns: 0, vibes: { good: 0, neutral: 0, bad: 0 } };
+  if (fs.existsSync(statsPath)) {
+    try { stats = JSON.parse(fs.readFileSync(statsPath, 'utf8')); } catch(e){}
+  }
+
+  const timeSavedMins = stats.totalSubmitted * 3;
+  const hours = Math.floor(timeSavedMins / 60);
+  const mins = timeSavedMins % 60;
+  const timeSavedStr = hours > 0 ? `${hours}h ${mins}m` : `${mins} mins`;
+
+  const D = '─'.repeat(58);
+  console.log('  ' + chalk.magenta('┌' + D + '┐'));
+  console.log('  ' + chalk.magenta('│') + pad(chalk.bold.white('  NERD STATS DASHBOARD 🤓'), 58) + chalk.magenta('│'));
+  console.log('  ' + chalk.magenta('├' + D + '┤'));
+  console.log('  ' + chalk.magenta('│') + pad(`  Total Feedbacks Auto-Filled : ${chalk.green.bold(stats.totalSubmitted)}`, 58) + chalk.magenta('│'));
+  console.log('  ' + chalk.magenta('│') + pad(`  Total Bot Runs              : ${chalk.yellow(stats.totalRuns)}`, 58) + chalk.magenta('│'));
+  console.log('  ' + chalk.magenta('│') + pad(`  Estimated Time Saved        : ${chalk.cyan.bold(timeSavedStr)}`, 58) + chalk.magenta('│'));
+  console.log('  ' + chalk.magenta('├' + D + '┤'));
+  
+  // Bar chart
+  const totalVibes = stats.vibes.good + stats.vibes.neutral + stats.vibes.bad || 1;
+  const makeBar = (count, colorFn) => {
+      const pct = count / totalVibes;
+      const filled = Math.round(pct * 16);
+      return colorFn('█'.repeat(filled)) + chalk.dim('░'.repeat(16 - filled)) + ` ${Math.round(pct*100).toString().padStart(3, ' ')}%`;
+  };
+
+  console.log('  ' + chalk.magenta('│') + pad('  Vibe Usage Distribution:', 58) + chalk.magenta('│'));
+  console.log('  ' + chalk.magenta('│') + pad(`  😇 Good Boy       [${makeBar(stats.vibes.good, chalk.green)}]`, 58) + chalk.magenta('│'));
+  console.log('  ' + chalk.magenta('│') + pad(`  😐 Meh            [${makeBar(stats.vibes.neutral, chalk.yellow)}]`, 58) + chalk.magenta('│'));
+  console.log('  ' + chalk.magenta('│') + pad(`  👿 Violence       [${makeBar(stats.vibes.bad, chalk.red)}]`, 58) + chalk.magenta('│'));
+  console.log('  ' + chalk.magenta('└' + D + '┘'));
+  console.log();
+  
+  console.log('  ' + chalk.dim('© Abhishek Singh  ·  ') + chalk.cyan.underline('github.com/AbhishekS04'));
+  process.exit(0);
+}
+
 function progressBar(done, total, width = 20) {
   const pct = total > 0 ? done / total : 0;
   const filled = Math.round(pct * width);
@@ -434,8 +482,21 @@ console.log(chalk.dim.italic('     ' + joke[1]));
 console.log(chalk.dim.italic('     ' + joke[2]));
 if (joke[3]) console.log(chalk.blue('     ' + joke[3]));
 
+// ── Save Stats ─────────────────────────────────────────────────────────────
+let ds = { totalSubmitted: 0, totalRuns: 0, vibes: { good: 0, neutral: 0, bad: 0 } };
+try {
+  if (fs.existsSync(statsPath)) ds = JSON.parse(fs.readFileSync(statsPath, 'utf8'));
+} catch(e){}
 
+ds.totalRuns += 1;
+ds.totalSubmitted += submitted;
+if (vibeStr && ds.vibes[vibeStr] !== undefined) {
+    ds.vibes[vibeStr] += 1;
+}
 
+try {
+  fs.writeFileSync(statsPath, JSON.stringify(ds), { mode: 0o600 });
+} catch(e){}
 
 console.log();
 console.log(gradient(['#06B6D4', '#6366F1', '#EC4899'])('  ' + '━'.repeat(56)));
