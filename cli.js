@@ -4,6 +4,7 @@ import ora from 'ora';
 import gradient from 'gradient-string';
 import figlet from 'figlet';
 import * as p from '@clack/prompts';
+import os from 'os';
 import { loginAndScan, runSubmissions } from './bot.js';
 import fs from 'fs';
 
@@ -67,6 +68,39 @@ for (const line of disclaimerLines) {
   console.log('  ' + chalk.yellow('│') + pad(line, 58) + chalk.yellow('│'));
 }
 console.log('  ' + chalk.yellow('└' + D + '┘'));
+console.log();
+
+// ── Pre-flight Check ────────────────────────────────────────────────────────
+console.log(chalk.cyan.bold('\n  🚀  Pre-flight System Check'));
+const s = p.spinner();
+s.start('Checking Node.js & OS Compatibility...');
+await new Promise(r => setTimeout(r, 800));
+
+const nodeVer = process.version;
+const majorVer = parseInt(nodeVer.replace('v', '').split('.')[0], 10);
+const platform = os.platform();
+let platformName = platform === 'win32' ? 'Windows' : platform === 'darwin' ? 'macOS' : platform === 'android' ? 'Termux (Android)' : 'Linux';
+
+if (majorVer >= 18) {
+  s.stop(chalk.green('✔') + chalk.dim(` Device: ${platformName}  |  Node.js ${nodeVer} (LTS Compatible)`));
+} else {
+  s.stop(chalk.red('✗') + chalk.red(` Device: ${platformName}  |  Node.js ${nodeVer} (Outdated)`));
+  
+  const installOption = await p.select({
+    message: chalk.yellow('Your Node.js is outdated (v18+ required). Select operation:'),
+    options: [
+      { value: 'manual', label: 'Continue manually at my own risk', hint: 'might crash' },
+      { value: 'auto', label: 'Auto-Install LTS Version', hint: 'not natively supported' }
+    ]
+  });
+
+  if (installOption === 'auto') {
+    p.outro(chalk.red('Auto-update from within npx is unsafe! Please install LTS from https://nodejs.org/'));
+    process.exit(1);
+  } else {
+    p.log.warn('Proceeding with fragile Node environment... Hold onto your hat!');
+  }
+}
 console.log();
 
 // ── Credentials ───────────────────────────────────────────────────────────────
