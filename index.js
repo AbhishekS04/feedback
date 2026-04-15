@@ -3,8 +3,11 @@ const { chromium } = require('playwright');
 // ==================== CONFIG ====================
 const LOGIN_URL     = 'https://adamasknowledgecity.ac.in/student/login';
 const DASHBOARD_URL = 'https://adamasknowledgecity.ac.in/student/dashboard';
-const STUDENT_ID    = 'AU/2023/0008918';
-const PASSWORD      = 'Abhishek23@04';
+
+// ⚠️  Run   node cli.js   instead — it prompts for credentials securely.
+// This file is kept as reference only and will not work without credentials.
+console.error('\n  ⚠️  Please run:  node cli.js\n');
+process.exit(1);
 
 // Rate-limit config — increase if you keep getting redirected away
 const DELAY_AFTER_SUBMIT_MS = 4000;   // wait after each form submit
