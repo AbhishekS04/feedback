@@ -23,6 +23,12 @@ debug-dashboard.png
 *.jpg
 *.jpeg
 
+# (But DO NOT ignore images in the public folder so they can be uploaded to GitHub/npm!)
+!public/
+!public/*.png
+!public/*.jpg
+!public/*.jpeg
+
 # =============================================
 # Environment / Secrets
 # =============================================

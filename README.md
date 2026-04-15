@@ -79,16 +79,36 @@ Once that finishes downloading, run `npx feedback-au` again!
 <details>
 <summary>📱 <b>For Android Users (Termux)</b></summary>
 
+If you are running this on your phone using Termux, follow these steps slowly one by one. **Do not skip any!**
+
+**Step 1: Update your system**
+Copy this line, paste it into Termux, and press Enter. *(If it ever asks `Y/n`, just type `y` and press Enter)*.
 ```bash
-# 1. Update and install required packages including Chromium
 pkg update && pkg upgrade -y
+```
+
+**Step 2: Get the extra Android packages**
+Copy and paste this, then press Enter:
+```bash
 pkg install x11-repo -y
+```
+
+**Step 3: Install the browser and Node.js**
+Copy and paste this, then press Enter. This installs a lightweight Android browser so your phone doesn't freeze!
+```bash
 pkg install chromium nodejs-lts git -y
+```
 
-# 2. Tell Playwright NOT to download its broken browser (saves 150MB!)
+**Step 4: Stop the bad download**
+Copy and paste this exact line, then press Enter. This tells the tool **not** to download the 150MB broken computer browser.
+```bash
 export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+```
 
-# 3. Run the bot
+**Step 5: Run the bot!**
+Finally, copy and paste this command and press Enter to start the magic:
+```bash
 npx feedback-au
 ```
+*(If it says "Need to install... Ok to proceed? (y)", just type `y` and press Enter!)*
 </details>
