@@ -18,7 +18,7 @@ async function gotoSafe(page, url) {
   await sleep(DELAY_AFTER_NAV_MS);
 }
 
-async function fillAndSubmitForm(page) {
+async function fillAndSubmitForm(page, vibe = 'good') {
   if (!page.url().includes('give-feedback')) {
     throw new Error(`Not on feedback page — at: ${page.url()}`);
   }
@@ -27,33 +27,76 @@ async function fillAndSubmitForm(page) {
   await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
   await sleep(500);
 
-  const radioResult = await page.evaluate(() => {
-    const yesRadios = document.querySelectorAll('input[type="radio"][value="y"]');
-    if (yesRadios.length > 0) {
-      yesRadios.forEach(r => { r.scrollIntoView({ block: 'center' }); r.click(); });
-      return { method: 'yes-value', count: yesRadios.length };
-    }
-    const allRadios = document.querySelectorAll('input[type="radio"]');
-    const used = new Set();
+  const radioResult = await page.evaluate((currentVibe) => {
+    let method = 'none';
     let count = 0;
+    
+    // Group radios by name for logical selection
+    const allRadios = Array.from(document.querySelectorAll('input[type="radio"]'));
+    const groups = {};
     allRadios.forEach(r => {
-      if (!used.has(r.name)) {
-        used.add(r.name);
-        r.scrollIntoView({ block: 'center' });
-        r.click();
-        count++;
-      }
+        if (!groups[r.name]) groups[r.name] = [];
+        groups[r.name].push(r);
     });
-    return { method: 'first-in-group', count };
-  });
+
+    for (const name in groups) {
+        const group = groups[name];
+        if (group.length === 0) continue;
+        
+        let targetIndex = 0;
+        if (currentVibe === 'good') {
+            const y = group.findIndex(r => r.value.toLowerCase() === 'y');
+            targetIndex = y >= 0 ? y : 0;
+        } else if (currentVibe === 'neutral') {
+            targetIndex = Math.floor(group.length / 2);
+        } else if (currentVibe === 'bad') {
+            const n = group.findIndex(r => r.value.toLowerCase() === 'n');
+            targetIndex = n >= 0 ? n : group.length - 1;
+        }
+
+        const target = group[targetIndex];
+        if (target) {
+            target.scrollIntoView({ block: 'center' });
+            target.click();
+            count++;
+        }
+    }
+    
+    if (count > 0) method = 'vibe-group';
+    return { method, count };
+  }, vibe);
 
   await sleep(200);
 
-  await page.evaluate(() => {
+  await page.evaluate((currentVibe) => {
     document.querySelectorAll('input[type="range"]').forEach(s => {
-      s.value = s.max || '5';
+      let max = parseInt(s.max) || 5;
+      let min = parseInt(s.min) || 1;
+      let val = max;
+      if (currentVibe === 'neutral') val = Math.floor((max + min) / 2);
+      if (currentVibe === 'bad') val = min;
+      
+      s.value = val;
       s.dispatchEvent(new Event('input', { bubbles: true }));
       s.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }, vibe);
+
+  // Mandatory Smart Comments (only active on 'required' text fields)
+  await page.evaluate(() => {
+    const comments = [
+        "The lectures were extremely helpful and detailed.",
+        "Good teaching methodology.",
+        "Clear explanations. No specific suggestions.",
+        "The pacing of the course was perfect.",
+        "Great interactions with students."
+    ];
+    document.querySelectorAll('textarea, input[type="text"]').forEach(el => {
+        if (el.required || el.getAttribute('required') !== null || el.classList.contains('required')) {
+            el.value = comments[Math.floor(Math.random() * comments.length)];
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
     });
   });
 
@@ -135,7 +178,7 @@ export async function loginAndScan({ studentId, password, headless = false, onSt
 // ─────────────────────────────────────────────────────────────────────────────
 // EXPORT 2: Run all pending submissions, firing onEvent throughout
 // ─────────────────────────────────────────────────────────────────────────────
-export async function runSubmissions({ browser, page, onEvent = () => {} }) {
+export async function runSubmissions({ browser, page, vibe = 'good', onEvent = () => {} }) {
   let totalSuccess = 0;
   let totalFailed  = 0;
   const subjectFailCount = {};
@@ -223,7 +266,7 @@ export async function runSubmissions({ browser, page, onEvent = () => {} }) {
           throw new Error(`Redirected away: ${page.url()}`);
         }
 
-        await fillAndSubmitForm(page);
+        await fillAndSubmitForm(page, vibe);
         totalSuccess++;
         subjectSuccess++;
         subjectFailCount[baseName] = 0;

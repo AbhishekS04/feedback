@@ -7,9 +7,14 @@ import * as p from '@clack/prompts';
 import os from 'os';
 import { loginAndScan, runSubmissions } from './bot.js';
 import fs from 'fs';
+import path from 'path';
 
 const pkgInfo = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url)));
 const cliVersion = pkgInfo.version;
+
+// Watch mode detection
+const isWatchMode = process.argv.includes('--watch') || process.argv.includes('--show');
+const headlessMode = !isWatchMode;
 // ── Utils ─────────────────────────────────────────────────────────────────────
 const figletAsync = (text, opts) =>
   new Promise((res, rej) =>
@@ -103,32 +108,93 @@ if (majorVer >= 18) {
 }
 console.log();
 
+// ── Update Check ────────────────────────────────────────────────────────
+try {
+  const npmData = await fetch('https://registry.npmjs.org/feedback-au/latest').then(r => r.json());
+  if (npmData.version && npmData.version !== cliVersion) {
+    p.note(
+      chalk.yellow(`A new version is available: ${chalk.bold(npmData.version)}\nRun: `) + chalk.cyan('npx feedback-au@latest'),
+      chalk.green('Update Available')
+    );
+  }
+} catch (e) {
+  // ignore network errors for updater
+}
+
 // ── Credentials ───────────────────────────────────────────────────────────────
 p.intro(chalk.bgCyan.black.bold('  FEEDBACK BOT  '));
 
-console.log(chalk.dim('\n  Your credentials never leave your machine.\n'));
+const credPath = path.join(os.homedir(), '.feedback-au-credentials.json');
+let creds = null;
 
-const creds = await p.group(
-  {
-    studentId: () =>
-      p.text({
-        message: 'Student ID',
-        placeholder: 'AU/XXXX/XXXXXXX',
-        validate: v => (!v.trim() ? 'Required' : undefined),
-      }),
-    pass: () =>
-      p.password({
-        message: 'Password',
-        validate: v => (!v ? 'Required' : undefined),
-      }),
-  },
-  {
-    onCancel: () => {
-      p.cancel(chalk.yellow('Cancelled. Goodbye! 👋'));
-      process.exit(0);
+if (fs.existsSync(credPath)) {
+  try {
+    const saved = JSON.parse(fs.readFileSync(credPath, 'utf8'));
+    if (saved.studentId && saved.pass) {
+      const useSaved = await p.confirm({
+        message: chalk.cyan(`Found saved login for ${saved.studentId}. Use this?`),
+        initialValue: true,
+      });
+      if (p.isCancel(useSaved)) { p.cancel('Cancelled.'); process.exit(0); }
+      if (useSaved) {
+        creds = { studentId: saved.studentId, pass: Buffer.from(saved.pass, 'base64').toString('utf8') };
+      }
+    }
+  } catch (e) {}
+}
+
+if (!creds) {
+  console.log(chalk.dim('\n  Your credentials never leave your machine.\n'));
+
+  creds = await p.group(
+    {
+      studentId: () =>
+        p.text({
+          message: 'Student ID',
+          placeholder: 'AU/XXXX/XXXXXXX',
+          validate: v => (!v.trim() ? 'Required' : undefined),
+        }),
+      pass: () =>
+        p.password({
+          message: 'Password',
+          validate: v => (!v ? 'Required' : undefined),
+        }),
     },
+    {
+      onCancel: () => {
+        p.cancel(chalk.yellow('Cancelled. Goodbye! 👋'));
+        process.exit(0);
+      },
+    }
+  );
+
+  const savePrompt = await p.confirm({
+    message: chalk.gray('Save these credentials securely for next time?'),
+    initialValue: true,
+  });
+  if (savePrompt && !p.isCancel(savePrompt)) {
+    fs.writeFileSync(
+      credPath,
+      JSON.stringify({
+        studentId: creds.studentId.trim().toUpperCase(),
+        pass: Buffer.from(creds.pass).toString('base64'),
+      }),
+      { mode: 0o600 }
+    );
   }
-);
+}
+
+// ── Vibe Check ───────────────────────────────────────────────────────────────────
+console.log();
+const vibeStr = await p.select({
+  message: 'What\'s the vibe today?',
+  options: [
+    { value: 'good', label: '😇 Good Boy', hint: 'Max positive ratings' },
+    { value: 'neutral', label: '😐 Meh', hint: 'Average 50% ratings' },
+    { value: 'bad', label: '👿 I Chose Violence', hint: 'Min negative ratings' }
+  ]
+});
+if (p.isCancel(vibeStr)) { p.cancel('Cancelled.'); process.exit(0); }
 
 console.log();
 
@@ -141,7 +207,7 @@ try {
   session = await loginAndScan({
     studentId: creds.studentId.trim().toUpperCase(),
     password: creds.pass,
-    headless: false,
+    headless: headlessMode,
     onStatus: msg => clackSpinner.message(chalk.cyan(msg)),
   });
 } catch (err) {
@@ -244,6 +310,7 @@ function liveStatus(subject, date) {
 await runSubmissions({
   browser,
   page,
+  vibe: vibeStr,
   onEvent(ev) {
     switch (ev.type) {
 
