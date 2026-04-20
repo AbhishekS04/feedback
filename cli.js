@@ -5,7 +5,7 @@ import gradient from 'gradient-string';
 import figlet from 'figlet';
 import * as p from '@clack/prompts';
 import os from 'os';
-import { loginAndScan, runSubmissions, forceSyncAttendance } from './bot.js';
+import { loginAndScan, runSubmissions, forceSyncAttendance, fetchAttendanceStats } from './bot.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -20,6 +20,7 @@ if (helpMode) {
   console.log(chalk.white.bold('\nOptions:'));
   console.log(`  ${chalk.cyan('--watch')}        Run the browser visibly (headed mode)`);
   console.log(`  ${chalk.cyan('--sync')}         Force-sync the biometric attendance logs bypass`);
+  console.log(`  ${chalk.cyan('--attendance')}   Check attendance stats and 75% calculations`);
   console.log(`  ${chalk.cyan('--status')}       View your lifetime stats graphical dashboard`);
   console.log(`  ${chalk.cyan('--help, -h')}     Show this help message\n`);
   process.exit(0);
@@ -40,6 +41,7 @@ const pad = (str, len) => str + ' '.repeat(Math.max(0, len - stripAnsi(str).leng
 // Analytics mode detection
 const isAnalyticsMode = process.argv.includes('--status');
 const isSyncMode = process.argv.includes('--sync');
+const isAttendanceMode = process.argv.includes('--attendance') || process.argv.includes('-a');
 const statsPath = path.join(os.homedir(), '.feedback-au-stats.json');
 
 if (isAnalyticsMode) {
@@ -279,6 +281,100 @@ if (isSyncMode) {
   } catch (err) {
     if (browser) await browser.close();
     clackSpinner.stop(chalk.red('✗ Error during sync'));
+    console.error(chalk.red('\nFatal crash:\n' + err.message));
+    process.exit(1);
+  }
+}
+
+// ── Attendance Mode Divert ────────────────────────────────────────────────────────────
+if (isAttendanceMode) {
+  console.log();
+  const clackSpinner = p.spinner();
+  clackSpinner.start(chalk.cyan('Connecting to ADAMAS portal for attendance data...'));
+  
+  let browser;
+  try {
+    const res = await fetchAttendanceStats({
+      studentId: creds.studentId.trim().toUpperCase(),
+      password: creds.pass,
+      headless: headlessMode,
+      onStatus: msg => clackSpinner.message(chalk.magenta(msg)),
+    });
+    browser = res.browser;
+    clackSpinner.stop(chalk.green('✓ Fetched attendance data!'));
+    
+    console.log();
+    const LINE = '─'.repeat(90);
+    console.log('  ' + chalk.cyan('┌' + LINE + '┐'));
+    console.log('  ' + chalk.cyan('│') + '  ' + chalk.bold.white('BIOMETRIC ATTENDANCE DASHBOARD') + ' '.repeat(90 - 32) + chalk.cyan('│'));
+    console.log('  ' + chalk.cyan('├' + LINE + '┤'));
+    
+    const colHeaders = chalk.dim(pad('Course', 40) + pad('Present', 10) + pad('Total', 8) + pad('%', 7) + pad('75% Status', 25));
+    console.log('  ' + chalk.cyan('│') + '  ' + pad(colHeaders, 88) + chalk.cyan('│'));
+    console.log('  ' + chalk.cyan('├' + LINE + '┤'));
+    
+    if (res.data.length === 0) {
+      console.log('  ' + chalk.cyan('│') + '  ' + chalk.yellow('No attendance data found on the portal right now.') + ' '.repeat(41) + chalk.cyan('│'));
+    }
+
+    for (const row of res.data) {
+      // Clean up course name
+      let cName = row.course.replace(/\|\|/g, '').trim();
+      if (cName.length > 37) cName = cName.substring(0, 34) + '...';
+      
+      const pCount = row.totalPresent;
+      const tCount = row.totalClasses;
+      const pct = row.percentage;
+      
+      let pctStr = pct >= 75 ? chalk.green(`${pct}%`) : chalk.red(`${pct}%`);
+      
+      // Calculate 75% metric
+      // Target: (P + x) / (T + x) = 0.75  =>  x = 3T - 4P
+      // Bunk: P / (T + y) = 0.75  =>  y = (4P - 3T) / 3
+      let statusStr = '';
+      if (pct < 75) {
+         let needed = (3 * tCount) - (4 * pCount);
+         // if needed is fraction, we ceil
+         needed = Math.ceil(needed);
+         if (needed > 0) {
+            statusStr = chalk.red(`⚠ Need ${needed} more class(es)`);
+         } else {
+            // Edge case if 0 but < 75?
+            statusStr = chalk.yellow(`⚠ On edge`);
+         }
+      } else {
+         let safeBunks = Math.floor(((4 * pCount) - (3 * tCount)) / 3);
+         if (safeBunks > 0) {
+            statusStr = chalk.green(`✓ Safe to bunk ${safeBunks} class(es)`);
+         } else {
+            statusStr = chalk.yellow(`⚠ Can't miss the next one!`);
+         }
+      }
+
+      const rowStr = chalk.white(pad(cName, 40)) + 
+                     chalk.cyan(pad(pCount.toString(), 10)) + 
+                     chalk.dim(pad(tCount.toString(), 8)) + 
+                     pad(pctStr, 16) + // ANSI colored string needs more padding space physically vs visually. `pctStr` visually is max 6 chars. 
+                     statusStr;
+      
+      // stripAnsi for accurate padding
+      const visualLen = stripAnsi(rowStr).length;
+      const finalRow = rowStr + ' '.repeat(Math.max(0, 88 - visualLen));
+                     
+      console.log('  ' + chalk.cyan('│') + '  ' + finalRow + chalk.cyan('│'));
+    }
+    
+    console.log('  ' + chalk.cyan('└' + LINE + '┘'));
+    
+    console.log();
+    console.log(gradient(['#06B6D4', '#6366F1', '#EC4899'])('  ' + '━'.repeat(88)));
+    console.log('  ' + chalk.dim('© Abhishek Singh  ·  ') + chalk.cyan.underline('github.com/AbhishekS04'));
+    
+    await browser.close();
+    process.exit(0);
+  } catch (err) {
+    if (browser) await browser.close();
+    clackSpinner.stop(chalk.red('✗ Error fetching attendance'));
     console.error(chalk.red('\nFatal crash:\n' + err.message));
     process.exit(1);
   }

@@ -450,3 +450,77 @@ export async function forceSyncAttendance({ studentId, password, headless = fals
   
   return { browser, page, logs };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPORT 4: Fetch Attendance Data
+// ─────────────────────────────────────────────────────────────────────────────
+export async function fetchAttendanceStats({ studentId, password, headless = false, onStatus = () => {} }) {
+  const launchOptions = { headless, slowMo: 20 };
+  
+  if (os.platform() === 'android') {
+    try {
+      launchOptions.executablePath = execSync('which chromium').toString().trim();
+    } catch (e) {
+      launchOptions.executablePath = '/data/data/com.termux/files/usr/bin/chromium';
+    }
+  }
+
+  const browser = await chromium.launch(launchOptions);
+  const context = await browser.newContext();
+  const page    = await context.newPage();
+
+  onStatus('Logging in for Attendance Check...');
+  await gotoSafe(page, LOGIN_URL);
+
+  await page.locator('input[type="text"], input[name*="user"], input[name*="email"], input[name*="roll"], input[name*="id"]')
+            .first().fill(studentId);
+  await page.locator('input[type="password"]').first().fill(password);
+  await page.locator('button[type="submit"], input[type="submit"], button:has-text("Login"), button:has-text("Sign In")')
+            .first().click();
+
+  await page.waitForLoadState('load');
+  await sleep(3000);
+
+  if (page.url().includes('login')) {
+    await browser.close();
+    throw new Error('Login failed during attendance check.');
+  }
+
+  onStatus('Navigating to Biometric Attendance...');
+  const ATTENDANCE_URL = 'https://adamasknowledgecity.ac.in/student/attendance';
+  await gotoSafe(page, ATTENDANCE_URL);
+
+  onStatus('Extracting records...');
+  await page.waitForSelector('table', { timeout: 15000 }).catch(() => {});
+  await sleep(1000);
+
+  const tableData = await page.evaluate(() => {
+    const tables = document.querySelectorAll('table');
+    let targetTable = null;
+    for (const t of tables) {
+        if (t.innerText.toLowerCase().includes('courses') && t.innerText.toLowerCase().includes('total present')) {
+            targetTable = t;
+            break;
+        }
+    }
+    
+    if (!targetTable) return [];
+
+    const rows = Array.from(targetTable.querySelectorAll('tbody tr'));
+    return rows.map(tr => {
+        const tds = tr.querySelectorAll('td');
+        if (tds.length >= 5) {
+            return {
+                course: tds[0].innerText.trim(),
+                totalClasses: parseInt(tds[1].innerText.trim(), 10) || 0,
+                totalPresent: parseInt(tds[2].innerText.trim(), 10) || 0,
+                totalAbsent: parseInt(tds[3].innerText.trim(), 10) || 0,
+                percentage: parseFloat(tds[4].innerText.replace('%', '').trim()) || 0
+            };
+        }
+        return null;
+    }).filter(r => r !== null && r.course);
+  });
+
+  return { browser, page, data: tableData };
+}
