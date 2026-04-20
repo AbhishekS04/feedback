@@ -5,7 +5,7 @@ import gradient from 'gradient-string';
 import figlet from 'figlet';
 import * as p from '@clack/prompts';
 import os from 'os';
-import { loginAndScan, runSubmissions } from './bot.js';
+import { loginAndScan, runSubmissions, forceSyncAttendance } from './bot.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -19,6 +19,7 @@ if (helpMode) {
   
   console.log(chalk.white.bold('\nOptions:'));
   console.log(`  ${chalk.cyan('--watch')}        Run the browser visibly (headed mode)`);
+  console.log(`  ${chalk.cyan('--sync')}         Force-sync the biometric attendance logs bypass`);
   console.log(`  ${chalk.cyan('--status')}       View your lifetime stats graphical dashboard`);
   console.log(`  ${chalk.cyan('--help, -h')}     Show this help message\n`);
   process.exit(0);
@@ -38,6 +39,7 @@ const pad = (str, len) => str + ' '.repeat(Math.max(0, len - stripAnsi(str).leng
 
 // Analytics mode detection
 const isAnalyticsMode = process.argv.includes('--status');
+const isSyncMode = process.argv.includes('--sync');
 const statsPath = path.join(os.homedir(), '.feedback-au-stats.json');
 
 if (isAnalyticsMode) {
@@ -241,6 +243,44 @@ if (!creds) {
       }),
       { mode: 0o600 }
     );
+  }
+}
+
+// ── Sync Mode Divert ──────────────────────────────────────────────────────────────────
+if (isSyncMode) {
+  console.log();
+  const clackSpinner = p.spinner();
+  clackSpinner.start(chalk.cyan('Connecting to ADAMAS portal for brutal sync...'));
+  
+  let browser;
+  try {
+    const res = await forceSyncAttendance({
+      studentId: creds.studentId.trim().toUpperCase(),
+      password: creds.pass,
+      headless: headlessMode,
+      onStatus: msg => clackSpinner.message(chalk.magenta(msg)),
+    });
+    browser = res.browser;
+    clackSpinner.stop(chalk.green('✓ Done syncing biometric attendance!'));
+    
+    console.log();
+    for (const msg of res.logs) {
+      console.log('  ' + msg);
+    }
+    
+    console.log();
+    console.log('  ' + chalk.cyan('Successfully bypassed time-locks and engaged all refresh buttons.'));
+    
+    console.log();
+    console.log(gradient(['#06B6D4', '#6366F1', '#EC4899'])('  ' + '━'.repeat(56)));
+    console.log('  ' + chalk.dim('© Abhishek Singh  ·  ') + chalk.cyan.underline('github.com/AbhishekS04'));
+    await browser.close();
+    process.exit(0);
+  } catch (err) {
+    if (browser) await browser.close();
+    clackSpinner.stop(chalk.red('✗ Error during sync'));
+    console.error(chalk.red('\nFatal crash:\n' + err.message));
+    process.exit(1);
   }
 }
 

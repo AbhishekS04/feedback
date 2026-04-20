@@ -8,7 +8,6 @@ const DASHBOARD_URL = 'https://adamasknowledgecity.ac.in/student/dashboard';
 const DELAY_AFTER_SUBMIT_MS = 4000;
 const DELAY_AFTER_NAV_MS    = 2500;
 const DELAY_AFTER_ERROR_MS  = 3000;
-const MAX_SUBJECT_FAILURES  = 4;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -181,7 +180,6 @@ export async function loginAndScan({ studentId, password, headless = false, onSt
 export async function runSubmissions({ browser, page, vibe = 'good', onEvent = () => {} }) {
   let totalSuccess = 0;
   let totalFailed  = 0;
-  const subjectFailCount = {};
   const skippedSubjects  = new Set();
 
   const giveBtnSel =
@@ -229,20 +227,39 @@ export async function runSubmissions({ browser, page, vibe = 'good', onEvent = (
 
     let subjectSuccess = 0;
     let subjectFailed  = 0;
+    let skippedFeedbacksThisSubject = new Set();
 
     for (let inner = 1; inner <= 300; inner++) {
       const btnCount = await page.locator(giveBtnSel).count();
-      if (btnCount === 0) {
+      
+      let btnIndex = -1;
+      let targetHref = null;
+      for (let i = 0; i < btnCount; i++) {
+        const href = await page.locator(giveBtnSel).nth(i).getAttribute('href').catch(() => null);
+        if (href) {
+          if (!skippedFeedbacksThisSubject.has(href)) {
+            btnIndex = i;
+            targetHref = href;
+            break;
+          }
+        } else {
+          if (!skippedFeedbacksThisSubject.has(`index_${i}`)) {
+            btnIndex = i;
+            targetHref = `index_${i}`;
+            break;
+          }
+        }
+      }
+
+      if (btnIndex === -1) {
         onEvent({ type: 'subject_done', name: baseName, submitted: subjectSuccess, failed: subjectFailed });
-        subjectFailCount[baseName] = 0;
         break;
       }
 
       let date = '';
       try {
-        const href = await page.locator(giveBtnSel).first().getAttribute('href');
-        if (href) {
-          const u = new URL(href, page.url());
+        if (targetHref && !targetHref.startsWith('index_')) {
+          const u = new URL(targetHref, page.url());
           date = u.searchParams.get('attendDate') || '';
         }
       } catch (_) {}
@@ -250,13 +267,12 @@ export async function runSubmissions({ browser, page, vibe = 'good', onEvent = (
       onEvent({ type: 'feedback_start', n: inner, subject: baseName, date });
 
       try {
-        const href = await page.locator(giveBtnSel).first().getAttribute('href').catch(() => null);
-        if (href && href.includes('give-feedback')) {
-          await gotoSafe(page, href.startsWith('http') ? href : `https://adamasknowledgecity.ac.in${href}`);
+        if (targetHref && !targetHref.startsWith('index_') && targetHref.includes('give-feedback')) {
+          await gotoSafe(page, targetHref.startsWith('http') ? targetHref : `https://adamasknowledgecity.ac.in${targetHref}`);
         } else {
           await Promise.all([
             page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 25000 }),
-            page.locator(giveBtnSel).first().click(),
+            page.locator(giveBtnSel).nth(btnIndex).click(),
           ]);
           await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
           await sleep(DELAY_AFTER_NAV_MS);
@@ -269,7 +285,6 @@ export async function runSubmissions({ browser, page, vibe = 'good', onEvent = (
         await fillAndSubmitForm(page, currentVibe);
         totalSuccess++;
         subjectSuccess++;
-        subjectFailCount[baseName] = 0;
         onEvent({ type: 'feedback_success', n: inner, subject: baseName, date, totalSuccess });
 
         await gotoSafe(page, DASHBOARD_URL);
@@ -291,17 +306,9 @@ export async function runSubmissions({ browser, page, vibe = 'good', onEvent = (
         totalFailed++;
         subjectFailed++;
         const errMsg = err.message.split('\n')[0].substring(0, 100);
-        subjectFailCount[baseName] = (subjectFailCount[baseName] || 0) + 1;
-        const streak = subjectFailCount[baseName];
+        skippedFeedbacksThisSubject.add(targetHref);
 
-        onEvent({ type: 'feedback_fail', n: inner, subject: baseName, error: errMsg, streak });
-
-        if (streak >= MAX_SUBJECT_FAILURES) {
-          onEvent({ type: 'subject_skip', name: baseName });
-          skippedSubjects.add(baseName);
-          await sleep(1000);
-          break;
-        }
+        onEvent({ type: 'feedback_fail', n: inner, subject: baseName, error: errMsg, streak: 1 });
 
         await sleep(DELAY_AFTER_ERROR_MS);
         await gotoSafe(page, DASHBOARD_URL);
@@ -320,8 +327,126 @@ export async function runSubmissions({ browser, page, vibe = 'good', onEvent = (
         await sleep(2000);
       }
     }
+    
+    // Ensure we don't revisit this subject in the outer loop
+    skippedSubjects.add(baseName);
   }
 
   onEvent({ type: 'all_done', totalSuccess, totalFailed, skipped: [...skippedSubjects] });
-  return { totalSuccess, totalFailed, skipped: [...skippedSubjects] };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPORT 3: Force Sync Attendance (Bypass Time Locks)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function forceSyncAttendance({ studentId, password, headless = false, onStatus = () => {} }) {
+  const launchOptions = { headless, slowMo: 20 };
+  
+  if (os.platform() === 'android') {
+    try {
+      launchOptions.executablePath = execSync('which chromium').toString().trim();
+    } catch (e) {
+      launchOptions.executablePath = '/data/data/com.termux/files/usr/bin/chromium';
+    }
+  }
+
+  const browser = await chromium.launch(launchOptions);
+  const context = await browser.newContext();
+  const page    = await context.newPage();
+
+  onStatus('Logging in for Attendance Sync...');
+  await gotoSafe(page, LOGIN_URL);
+
+  await page.locator('input[type="text"], input[name*="user"], input[name*="email"], input[name*="roll"], input[name*="id"]')
+            .first().fill(studentId);
+  await page.locator('input[type="password"]').first().fill(password);
+  await page.locator('button[type="submit"], input[type="submit"], button:has-text("Login"), button:has-text("Sign In")')
+            .first().click();
+
+  await page.waitForLoadState('load');
+  await sleep(3000);
+
+  if (page.url().includes('login')) {
+    await browser.close();
+    throw new Error('Login failed during attendance sync.');
+  }
+
+  // Navigate to attendance page
+  onStatus('Navigating to Biometric Attendance...');
+  const ATTENDANCE_URL = 'https://adamasknowledgecity.ac.in/student/attendance';
+  await gotoSafe(page, ATTENDANCE_URL);
+
+  onStatus('Injecting bypass script into DOM...');
+  
+  // Strip all 'disabled' and 'hidden' classes/attributes from anything inside the attendance table
+  const foundButtonsCount = await page.evaluate(() => {
+    // Specifically target the exact refresh buttons from the UI payload
+    // They usually have classes like btn-refresh, refreshAttendance, or icons like fa-refresh
+    const refreshButtons = document.querySelectorAll('button, a, input');
+    let unlocked = 0;
+    
+    for (const btn of refreshButtons) {
+      const text = (btn.innerText || btn.title || btn.className || '').toLowerCase();
+      // If it looks like a refresh button from the attendance payload
+      if (text.includes('refresh') || text.includes('sync') || btn.querySelector('.fa-refresh, .fa-sync')) {
+        btn.removeAttribute('disabled');
+        btn.style.display = 'inline-block';
+        btn.style.visibility = 'visible';
+        btn.style.opacity = '1';
+        btn.classList.remove('disabled');
+        
+        // Find ancestor rows and un-hide them if they were hidden
+        let parent = btn.parentElement;
+        while(parent && parent.tagName !== 'BODY') {
+            if(parent.style.display === 'none') parent.style.display = 'block';
+            parent = parent.parentElement;
+        }
+        
+        unlocked++;
+      }
+    }
+    return unlocked;
+  });
+
+  const logs = [];
+  logs.push(`Unlocked ${foundButtonsCount} hidden/disabled refresh buttons via DOM injection.`);
+
+  if (foundButtonsCount === 0) {
+     logs.push('Could not find any refresh buttons on the page. They might be rendered dynamically later.');
+     return { browser, page, logs };
+  }
+
+  onStatus(`Executing ${foundButtonsCount} brutal click(s)...`);
+  
+  // Set up network interceptor to tally 200 OKs vs 500 Errors
+  let successCount = 0;
+  let failCount = 0;
+
+  page.on('response', resp => {
+    if (resp.url().includes('update-biometric') || resp.url().includes('refreshAttendanceStatus')) {
+      if (resp.status() >= 200 && resp.status() < 300) {
+        successCount++;
+      } else {
+        failCount++;
+      }
+    }
+  });
+
+  // Let's actually execute the clicks
+  // We click everything that we targeted above
+  await page.evaluate(() => {
+    const refreshButtons = document.querySelectorAll('button, a, input');
+    for (const btn of refreshButtons) {
+      const text = (btn.innerText || btn.title || btn.className || '').toLowerCase();
+      if (text.includes('refresh') || text.includes('sync') || btn.querySelector('.fa-refresh, .fa-sync')) {
+        try { btn.click(); } catch(e){}
+      }
+    }
+  });
+
+  onStatus('Awaiting server responses from Adamas backend...');
+  await sleep(7000); // Give the 500 errors and 200 OKs time to resolve
+
+  logs.push(`Network Intersect Result: ${successCount} Successful Syncs | ${failCount} Failed (Server Errors)`);
+  
+  return { browser, page, logs };
 }
