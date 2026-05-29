@@ -1,114 +1,90 @@
-# 🚀 Adamas University Feedback Automator
+# 🚀 ADAMAS Feedback Bot & Attendance Sync
 
-Tired of clicking through pages just to submit your academic feedback? This tool does it all for you automatically in seconds!
+Tired of clicking through hundreds of pages just to submit academic feedback or calculating attendance metrics by hand? The **ADAMAS Feedback Bot & Attendance Sync** does it all automatically with a premium cyber-cowboy aesthetic!
 
-![Feedback Bot Preview](./public/preview.png)
-
-> **⚠️ Quick Disclaimer:**
-> Please use this only for your own account. Your ID and password are safe — they stay securely on your computer and are only used to log in directly to the university portal. No data is saved or shared.
+Now available both as a **High-Fidelity Chrome/Brave Extension** and a **Command Line CLI tool**!
 
 ---
 
-## 🛠️ How to Use It
+## 🌟 Key Features
 
-Don't worry if you've never used a terminal before! Just follow these two simple steps.
-
-### Step 1: Install Node.js
-Your computer needs a small background program called **Node.js** to run this tool. You can download it directly from their site, or be a pro and use a quick terminal command to install it.
-
-**🪟 For Windows:**
-* Download from the [Node.js Website](https://nodejs.org/) (Choose the "LTS" version).
-* **Or** open PowerShell and paste this command:
-  ```powershell
-  winget install OpenJS.NodeJS.LTS
-  ```
-
-**🍎 For Mac:**
-* Download from the [Node.js Website](https://nodejs.org/) (Choose the "LTS" version).
-* **Or** open your Terminal and paste these commands:
-  ```bash
-  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-  source ~/.zshrc
-  nvm install --lts
-  nvm use --lts
-  ```
-
-**🐧 For Linux:**
-* Open your Terminal and paste these commands:
-  ```bash
-  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-  source ~/.bashrc
-  nvm install --lts
-  nvm use --lts
-  ```
+* **⚡ Ultra-Fast Automation:** Autofills and submits pending feedback forms on the Adamas University Student Portal in seconds.
+* **🤠 Cowboy Vibe Selector:** Adjust the tone of your feedback text:
+  * `SAVAGE`: Direct, candid, and high-impact.
+  * `DIPLOMATIC`: Balanced, professional, and formal.
+  * `FRIENDLY`: Highly positive, encouraging, and warm.
+* **🎯 Sniper Mode:** Customize vibes individually for each subject if you don't want a global vibe!
+* **📅 Attendance Sync & Predictor:** Analyzes your biometric attendance data in real-time, highlights low-attendance courses, and calculates the **exact number of consecutive classes** you need to attend to cross the 75% target threshold.
+* **🔒 Privacy First:** 100% client-side execution. Your Student ID and password stay completely in your local browser sandbox or terminal cache. Zero external APIs, zero servers.
 
 ---
 
-### Step 2: Run the Bot
+## 🎨 Method 1: The Chrome/Brave Extension (Free 0-Rupees Method)
+
+Get a gorgeous, in-page dark HUD console drawer overlay with a floating neon cowboy shortcut!
+
+### 📥 30-Second Installation Guide:
+1. **Download:** Click on the green `Code` button above and choose **Download ZIP**, then unzip it. (Or use the pre-packed **`adamas-feedback-bot.zip`**).
+2. **Go to Extensions:** Open Chrome or Brave and navigate to **`chrome://extensions/`**.
+3. **Developer Mode:** Turn **ON** the "Developer Mode" toggle in the top right corner.
+4. **Load Unpacked:** Click **"Load unpacked"** in the top left and select the folder named **`extension`** inside your extracted files.
+5. **Boom!** Your browser will immediately display the custom glowing cyber-cowboy logo.
+
+### 🎮 How it works:
+* Go to the **[Adamas Student Portal](https://adamasknowledgecity.ac.in/student/)**.
+* Click the glowing neon-yellow shortcut launcher at the **bottom-right corner** of the page to open your assistant drawer.
+* Manage saved credentials (with delete options), pick your favorite vibe, and run the feedback bot with a single tap!
+
+---
+
+## 💻 Method 2: The Command Line Tool (CLI)
+
+Don't want to install an extension? Run the bot directly from your computer's terminal without downloading any files!
+
+### 🚀 Quick Start:
+Ensure you have **Node.js** (LTS) installed on your system.
+
 1. Open your computer's terminal:
-   * **Windows:** Search for "Command Prompt" or "PowerShell" in your start menu.
-   * **Mac/Linux:** Search for "Terminal".
-2. Copy and paste the following command, then press **Enter**:
-
+   * **Windows:** Search for "PowerShell" or "Command Prompt".
+   * **Mac / Linux:** Open your "Terminal".
+2. Run this command:
    ```bash
    npx feedback-au
    ```
+3. Type `y` to install the package.
+4. Enter your Student ID and Password, and watch the bot handle the feedback loop automatically!
 
-3. If it asks you to install a package, just type `y` and press Enter.
-4. The bot will start and ask for your Student ID and Password. *(Note: your password will be hidden as you type, but it's there!)*
-5. Sit back and watch it complete all your pending subject feedbacks instantly! ✨
-
----
-
-## ❓ What exactly does this do?
-1. Opens a secure, invisible web browser.
-2. Logs you into the Adamas Student Portal.
-3. Automatically finds all the subject feedback forms you need to complete.
-4. Fills them in with positive ratings and submits them for you.
-5. Gives you a clean summary checklist when everything is done!
-
----
-
-### 🔧 Having Trouble?
-If you get an error saying something about "browsers" or "playwright", just copy and paste this command into your terminal and press Enter:
+*Having issues with Playwright or Chromium? Run:*
 ```bash
 npx playwright install chromium
 ```
-Once that finishes downloading, run `npx feedback-au` again!
+
+---
 
 <details>
-<summary>📱 <b>For Android Users (Termux)</b></summary>
+<summary>📱 <b>For Android Users (Termux CLI)</b></summary>
 
-If you are running this on your phone using Termux, follow these steps slowly one by one. **Do not skip any!**
+If you are running the terminal bot on an Android device using Termux, execute these setup steps sequentially:
 
-**Step 1: Update your system**
-Copy this line, paste it into Termux, and press Enter. *(If it ever asks `Y/n`, just type `y` and press Enter)*.
 ```bash
+# 1. Update the repository lists
 pkg update && pkg upgrade -y
-```
 
-**Step 2: Get the extra Android packages**
-Copy and paste this, then press Enter:
-```bash
+# 2. Enable external X11 repositories
 pkg install x11-repo -y
-```
 
-**Step 3: Install the browser and Node.js**
-Copy and paste this, then press Enter. This installs a lightweight Android browser so your phone doesn't freeze!
-```bash
+# 3. Install lightweight Chromium browser and Node.js
 pkg install chromium nodejs-lts git -y
-```
 
-**Step 4: Stop the bad download**
-Copy and paste this exact line, then press Enter. This tells the tool **not** to download the 150MB broken computer browser.
-```bash
+# 4. Stop Playwright from downloading computer-specific files
 export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-```
 
-**Step 5: Run the bot!**
-Finally, copy and paste this command and press Enter to start the magic:
-```bash
+# 5. Run the bot!
 npx feedback-au
 ```
-*(If it says "Need to install... Ok to proceed? (y)", just type `y` and press Enter!)*
 </details>
+
+---
+
+## 🛡️ Privacy & Transparency
+We take student security very seriously. All automation scripts are fully transparent and open source. All user session cache, stored tokens, and credentials are saved locally in the browser's `chrome.storage.local` API or terminal environment settings. No third-party analytical trackers, servers, or cloud dependencies exist.
