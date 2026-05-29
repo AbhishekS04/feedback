@@ -31,7 +31,7 @@ Get a gorgeous, in-page dark HUD console drawer overlay with a floating neon cow
 5. **Boom!** Your browser will immediately display the custom glowing cyber-cowboy logo.
 
 ### 🎮 How it works:
-* Go to the **[Adamas Student Portal](https://adamasknowledgecity.ac.in/student/)**.
+* Go to the **[Adamas Student Portal](https://adamasknowledgecity.ac.in/student/login)**.
 * Click the glowing neon-yellow shortcut launcher at the **bottom-right corner** of the page to open your assistant drawer.
 * Manage saved credentials (with delete options), pick your favorite vibe, and run the feedback bot with a single tap!
 
