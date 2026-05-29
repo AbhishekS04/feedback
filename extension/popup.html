@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ADAMAS Feedback Bot</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="logo-box">
+          <svg class="logo-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>ADAMAS</h1>
+          <h2>FEEDBACK BOT</h2>
+        </div>
+      </div>
+      <div style="display: flex; gap: 4px; align-items: center;">
+        <div class="badge" id="lbl-status" style="font-size: 8px; font-weight: 800; padding: 2px 6px; transition: all 0.2s ease;">PORTAL INACTIVE</div>
+        <div class="badge">v1.3.0</div>
+      </div>
+    </header>
+
+    <div class="divider"></div>
+
+    <!-- Main Content -->
+    <main class="content">
+      
+      <!-- Credentials Section -->
+      <section class="config-section">
+        <h3>COWBOY CREDENTIALS 🤠</h3>
+        
+        <!-- Account Dropdown Row -->
+        <div class="input-group">
+          <label for="sel-account">SELECT ACCOUNT</label>
+          <div class="account-select-row">
+            <select id="sel-account">
+              <option value="new">+ Add New Account...</option>
+            </select>
+            <button type="button" id="btn-delete-account" class="btn-danger" title="Delete this account" style="display: none;">🗑️</button>
+          </div>
+        </div>
+
+        <!-- New Account Form Fields (Toggled by selection) -->
+        <div id="new-account-fields">
+          <div class="input-group" style="margin-top: 8px;">
+            <label for="txt-username">STUDENT ID</label>
+            <input type="text" id="txt-username" placeholder="e.g. AU/202X/000XXXX" autocomplete="off" />
+          </div>
+          <div class="input-group" style="margin-top: 8px;">
+            <label for="txt-password">PASSWORD</label>
+            <input type="password" id="txt-password" placeholder="••••••••••••" />
+          </div>
+          <button type="button" id="btn-save-account" class="btn" style="background-color: var(--accent); color: var(--bg-dark); font-size: 10px; margin-top: 8px; padding: 6px; border-radius: 4px; font-weight: 800; cursor: pointer; border: 1px solid var(--bg-dark); width: 100%;">
+            💾 SAVE NEW ACCOUNT
+          </button>
+        </div>
+
+        <div class="checkbox-row" style="margin-top: 8px; flex-direction: column; align-items: flex-start; gap: 6px;">
+          <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+            <input type="checkbox" id="chk-remember" checked />
+            <span>Remember active login credentials</span>
+          </label>
+          <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+            <input type="checkbox" id="chk-quiet-mode" />
+            <span>Hide in-page console panel (Quiet Mode)</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Bot Execution Mode Section -->
+      <section class="config-section">
+        <h3>EXECUTION MODE</h3>
+        <div class="mode-row">
+          <div class="mode-btn active" data-mode="feedback">📝 FEEDBACK</div>
+          <div class="mode-btn" data-mode="attendance">📊 CALC</div>
+          <div class="mode-btn" data-mode="sync">⚡ BIO SYNC</div>
+        </div>
+      </section>
+
+      <!-- Vibe Configuration (Only displayed when feedback mode is active) -->
+      <section class="config-section" id="vibe-config-panel">
+        <h3>SELECT VIBE</h3>
+        <div class="vibe-row">
+          <div class="vibe-btn active" data-vibe="good">😇 GOOD</div>
+          <div class="vibe-btn" data-vibe="neutral">😐 MEH</div>
+          <div class="vibe-btn" data-vibe="bad">👿 BAD</div>
+        </div>
+        <div class="checkbox-row" style="margin-top: 8px;">
+          <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+            <input type="checkbox" id="chk-sniper-popup" />
+            <span>🎯 Enable Sniper Handpick Mode</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Launch Controls -->
+      <section class="actions-section">
+        <button class="btn btn-primary" id="btn-launch-bot" style="width: 100%;">
+          🤠 LAUNCH BOT
+        </button>
+        <button class="btn" id="btn-stop-bot" style="width: 100%; display: none; background-color: #ef4444; color: #fff; border-color: #000; margin-top: 8px;">
+          🛑 STOP ACTIVE RUN
+        </button>
+      </section>
+
+      <div class="divider"></div>
+
+      <!-- Stats Section -->
+      <section class="stats-section">
+        <h3>LIFETIME NERD STATS 🤓</h3>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-label">Feedbacks Done</span>
+            <span class="stat-value" id="stat-submitted">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Total Bot Runs</span>
+            <span class="stat-value" id="stat-runs">0</span>
+          </div>
+        </div>
+        <div class="stat-card full-width" style="margin-top: 8px;">
+          <span class="stat-label">Estimated Time Saved</span>
+          <span class="stat-value highlight" id="stat-time-saved">0 mins</span>
+        </div>
+      </section>
+      
+    </main>
+
+    <footer class="footer">
+      <p>© Abhishek Singh · <a href="https://github.com/AbhishekS04" target="_blank">github.com/AbhishekS04</a></p>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
