@@ -87,10 +87,15 @@
       <!-- Vibe Configuration (Only displayed when feedback mode is active) -->
       <section class="config-section" id="vibe-config-panel">
         <h3>SELECT VIBE</h3>
-        <div class="vibe-row">
+        <div class="vibe-row" style="grid-template-columns: repeat(4, 1fr);">
           <div class="vibe-btn active" data-vibe="good">😇 GOOD</div>
           <div class="vibe-btn" data-vibe="neutral">😐 MEH</div>
           <div class="vibe-btn" data-vibe="bad">👿 BAD</div>
+          <div class="vibe-btn" data-vibe="custom">✍️ CUSTOM</div>
+        </div>
+        <div id="custom-remarks-group" style="display: none; margin-top: 8px;" class="input-group">
+          <label for="txt-custom-remarks">CUSTOM REMARKS TEXT</label>
+          <input type="text" id="txt-custom-remarks" placeholder="e.g., Highly interactive classes." />
         </div>
         <div class="checkbox-row" style="margin-top: 8px;">
           <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">

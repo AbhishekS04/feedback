@@ -41,7 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
     useSniperMode: false,
     botRunning: false,
     totalSubmitted: 0,
-    totalRuns: 0
+    totalRuns: 0,
+    customRemarks: ''
   }, (items) => {
     // Update Live Portal Status badge
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -108,6 +109,15 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.classList.remove('active');
       }
     });
+
+    const customRemarksGroup = document.getElementById('custom-remarks-group');
+    const txtCustomRemarks = document.getElementById('txt-custom-remarks');
+    if (txtCustomRemarks) {
+      txtCustomRemarks.value = items.customRemarks || '';
+    }
+    if (customRemarksGroup) {
+      customRemarksGroup.style.display = activeVibe === 'custom' ? 'block' : 'none';
+    }
 
     chkSniperPopup.checked = items.useSniperMode;
 
@@ -234,8 +244,20 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.classList.add('active');
       activeVibe = btn.getAttribute('data-vibe');
       chrome.storage.local.set({ globalVibe: activeVibe });
+      
+      const customRemarksGroup = document.getElementById('custom-remarks-group');
+      if (customRemarksGroup) {
+        customRemarksGroup.style.display = activeVibe === 'custom' ? 'block' : 'none';
+      }
     });
   });
+
+  const txtCustomRemarks = document.getElementById('txt-custom-remarks');
+  if (txtCustomRemarks) {
+    txtCustomRemarks.addEventListener('input', (e) => {
+      chrome.storage.local.set({ customRemarks: e.target.value });
+    });
+  }
 
   // 4. Checkbox handlers
   chkSniperPopup.addEventListener('change', (e) => {
@@ -302,6 +324,8 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    const customText = txtCustomRemarks ? txtCustomRemarks.value.trim() : '';
+
     // Save active configurations for launch
     const storeObj = {
       username: user,
@@ -312,6 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
       skippedFeedbacks: [],
       skippedSubjects: [],
       totalPendingCount: 0,
+      customRemarks: customText,
       runLogs: [
         { text: `🔥 Initiating ${activeMode.toUpperCase()} run for ID: ${user}...`, type: 'system' }
       ]

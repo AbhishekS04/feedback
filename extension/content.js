@@ -288,12 +288,16 @@
 
       <!-- Live Terminal CLI console -->
       <div class="terminal-card">
-        <div class="terminal-title-bar">
-          <h5>LIVE SHELL OUTPUT</h5>
-          <div class="terminal-dots">
-            <div class="terminal-dot dot-red"></div>
-            <div class="terminal-dot dot-yellow"></div>
-            <div class="terminal-dot dot-green"></div>
+        <div class="terminal-title-bar" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <h5 style="margin: 0;">LIVE SHELL OUTPUT</h5>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button id="btn-copy-logs" title="Copy console logs" style="background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 10px; display: flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: 4px; transition: all 0.2s ease;">📋 Copy</button>
+            <button id="btn-clear-logs" title="Clear console logs" style="background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 10px; display: flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: 4px; transition: all 0.2s ease;">🗑️ Clear</button>
+            <div class="terminal-dots" style="display: flex; gap: 4px;">
+              <div class="terminal-dot dot-red"></div>
+              <div class="terminal-dot dot-yellow"></div>
+              <div class="terminal-dot dot-green"></div>
+            </div>
           </div>
         </div>
         <div class="terminal-screen" id="console-output">
@@ -420,6 +424,25 @@
     attModal.classList.remove('active');
   });
 
+  const btnCopyLogs = shadow.getElementById('btn-copy-logs');
+  const btnClearLogs = shadow.getElementById('btn-clear-logs');
+  if (btnCopyLogs) {
+    btnCopyLogs.addEventListener('click', () => {
+      const text = Array.from(consoleOutput.querySelectorAll('.log-line'))
+                        .map(l => l.textContent)
+                        .join('\n');
+      navigator.clipboard.writeText(text);
+      addLog('Logs copied to clipboard!', 'success');
+    });
+  }
+  if (btnClearLogs) {
+    btnClearLogs.addEventListener('click', () => {
+      consoleOutput.innerHTML = '';
+      chrome.storage.local.set({ runLogs: [] });
+      addLog('Console logs cleared.', 'system');
+    });
+  }
+
   // Vibe Selection listeners
   shadow.querySelectorAll('.vibe-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -461,7 +484,8 @@
     skippedSubjects: [],
     totalPendingCount: 0,
     accounts: [],
-    selectedAccount: 'new'
+    selectedAccount: 'new',
+    customRemarks: ''
   }, async (store) => {
     // ── Panel Credentials Interface Logic ──
     const pSelAccount = shadow.getElementById('panel-sel-account');
@@ -717,7 +741,7 @@
       });
 
       // Sync sniper mode checkbox
-      const chkSniperElement = shadow.getElementById('chk-sniper-mode');
+      const chkSniperElement = shadow.getElementById('chk-sniper');
       const sniperListPanelElement = shadow.getElementById('sniper-list-panel');
       if (chkSniperElement) {
         chkSniperElement.checked = newStore.useSniperMode;
@@ -846,14 +870,106 @@
           }
 
           const modalRow = document.createElement('tr');
+          modalRow.style.cursor = 'pointer';
+          modalRow.className = 'course-row';
           modalRow.innerHTML = `
             <td><strong>${course.substring(0, 32)}</strong></td>
             <td>${totalPresent}</td>
             <td>${totalClasses}</td>
-            <td>${pct}%</td>
+            <td><span class="pct-val">${pct}%</span></td>
             <td><span class="status-badge ${badgeClass}">${targetMsg}</span></td>
           `;
+
+          // Simulator Sub-row
+          const simRow = document.createElement('tr');
+          simRow.className = 'simulator-row';
+          simRow.style.display = 'none';
+          simRow.innerHTML = `
+            <td colspan="5" style="background-color: rgba(255,255,255,0.02); padding: 12px; border-bottom: 1px solid var(--bg-border);">
+              <div class="sim-card" style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-weight: 800; font-size: 9px; color: var(--accent);">🤠 INTERACTIVE ATTENDANCE SIMULATOR</span>
+                  <span class="sim-pct-badge" style="font-family: monospace; font-size: 11px; font-weight: 800; background-color: var(--bg-card-solid); border: 1px solid var(--bg-border); padding: 2px 6px; border-radius: 4px; color: var(--good);">${pct}%</span>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px;">
+                  <!-- Attend Slide -->
+                  <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <label style="font-size: 8px; font-weight: 700; color: var(--text-muted);">ATTEND NEXT CLASSES</label>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <input type="range" class="range-attend" min="0" max="30" value="0" style="flex-grow: 1; accent-color: var(--good); margin: 0; padding: 0;">
+                      <span class="lbl-attend" style="font-family: monospace; font-size: 10px; font-weight: 700; width: 20px; text-align: right;">0</span>
+                    </div>
+                  </div>
+                  <!-- Bunk Slide -->
+                  <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <label style="font-size: 8px; font-weight: 700; color: var(--text-muted);">BUNK NEXT CLASSES</label>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <input type="range" class="range-bunk" min="0" max="30" value="0" style="flex-grow: 1; accent-color: var(--bad); margin: 0; padding: 0;">
+                      <span class="lbl-bunk" style="font-family: monospace; font-size: 10px; font-weight: 700; width: 20px; text-align: right;">0</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="sim-result-lbl" style="font-size: 9px; font-weight: 700; color: var(--text-muted); margin-top: 4px;">
+                  Simulation: Attendance stays at <span class="sim-result-pct" style="color: var(--text-primary);">${pct}%</span>. Status: <span class="sim-result-status status-badge ${badgeClass}">${targetMsg}</span>
+                </div>
+              </div>
+            </td>
+          `;
+
+          modalRow.addEventListener('click', () => {
+            const isHidden = simRow.style.display === 'none';
+            attendanceRowsContainer.querySelectorAll('.simulator-row').forEach(row => row.style.display = 'none');
+            simRow.style.display = isHidden ? 'table-row' : 'none';
+          });
+
+          const rAttend = simRow.querySelector('.range-attend');
+          const rBunk = simRow.querySelector('.range-bunk');
+          const lAttend = simRow.querySelector('.lbl-attend');
+          const lBunk = simRow.querySelector('.lbl-bunk');
+          const simPctBadge = simRow.querySelector('.sim-pct-badge');
+          const simResultPct = simRow.querySelector('.sim-result-pct');
+          const simResultStatus = simRow.querySelector('.sim-result-status');
+
+          function updateSimulation() {
+            const attendVal = parseInt(rAttend.value, 10);
+            const bunkVal = parseInt(rBunk.value, 10);
+            
+            lAttend.textContent = attendVal;
+            lBunk.textContent = bunkVal;
+            
+            const simP = totalPresent + attendVal;
+            const simT = totalClasses + attendVal + bunkVal;
+            const simPct = simT > 0 ? Math.round((simP / simT) * 1000) / 10 : 0;
+            
+            simPctBadge.textContent = `${simPct}%`;
+            simResultPct.textContent = `${simPct}%`;
+            
+            let simTargetMsg = '';
+            let simBadgeClass = 'edge';
+            
+            if (simPct < 75) {
+              simBadgeClass = 'danger';
+              let needed = Math.ceil((3 * simT) - (4 * simP));
+              simTargetMsg = needed > 0 ? `⚠ Need ${needed} classes` : '⚠ On edge';
+              simPctBadge.style.color = 'var(--bad)';
+            } else {
+              simBadgeClass = 'safe';
+              let safeBunks = Math.floor(((4 * simP) - (3 * simT)) / 3);
+              simTargetMsg = safeBunks > 0 ? `✓ Bunk ${safeBunks} classes` : `⚠ Danger edge`;
+              simPctBadge.style.color = 'var(--good)';
+            }
+            
+            simResultStatus.textContent = simTargetMsg;
+            simResultStatus.className = `sim-result-status status-badge ${simBadgeClass}`;
+          }
+
+          rAttend.addEventListener('input', updateSimulation);
+          rBunk.addEventListener('input', updateSimulation);
+
           attendanceRowsContainer.appendChild(modalRow);
+          attendanceRowsContainer.appendChild(simRow);
           parsed++;
         }
       });
@@ -1158,14 +1274,65 @@
         if (group.length === 0) continue;
         
         let targetIndex = 0;
-        if (currentVibe === 'good') {
-          const y = group.findIndex(r => r.value.toLowerCase() === 'y');
-          targetIndex = y >= 0 ? y : 0;
-        } else if (currentVibe === 'neutral') {
-          targetIndex = Math.floor(group.length / 2);
-        } else if (currentVibe === 'bad') {
-          const n = group.findIndex(r => r.value.toLowerCase() === 'n');
-          targetIndex = n >= 0 ? n : group.length - 1;
+        if (group.length === 2) {
+          // Yes/No radio group
+          const yesIndex = group.findIndex(r => {
+            const val = (r.value || '').toLowerCase();
+            let labelText = '';
+            if (r.id) {
+              const label = document.querySelector(`label[for="${r.id}"]`);
+              if (label) labelText = label.innerText.toLowerCase();
+            }
+            return val === 'y' || val.includes('yes') || val.includes('agree') || labelText.includes('yes') || labelText.includes('agree');
+          });
+          
+          if (currentVibe === 'good') {
+            targetIndex = yesIndex >= 0 ? yesIndex : 0;
+          } else if (currentVibe === 'neutral') {
+            targetIndex = 0;
+          } else if (currentVibe === 'bad') {
+            targetIndex = yesIndex >= 0 ? (yesIndex === 0 ? 1 : 0) : 1;
+          }
+        } else {
+          // Likert scale (e.g. 5 options or 3 options)
+          const firstVal = (group[0].value || '').toLowerCase();
+          let firstLabel = '';
+          if (group[0].id) {
+            const label = document.querySelector(`label[for="${group[0].id}"]`);
+            if (label) firstLabel = label.innerText.toLowerCase();
+          }
+          
+          const isWorstFirst = firstVal.includes('poor') || 
+                               firstVal.includes('disagree') || 
+                               firstVal.includes('bad') || 
+                               firstVal.includes('unsatisfactory') || 
+                               firstVal.includes('1') || 
+                               firstVal === 'n' ||
+                               firstLabel.includes('poor') || 
+                               firstLabel.includes('disagree') || 
+                               firstLabel.includes('bad') || 
+                               firstLabel.includes('strongly disagree');
+                               
+          const isBestFirst = firstVal.includes('excellent') || 
+                              firstVal.includes('agree') || 
+                              firstVal.includes('good') || 
+                              firstVal.includes('satisfactory') || 
+                              firstVal.includes('5') || 
+                              firstVal === 'y' ||
+                              firstLabel.includes('excellent') || 
+                              firstLabel.includes('agree') || 
+                              firstLabel.includes('good') || 
+                              firstLabel.includes('strongly agree');
+                              
+          let isDescending = isBestFirst && !isWorstFirst; // best option is listed first
+          
+          if (currentVibe === 'good') {
+            targetIndex = isDescending ? 0 : group.length - 1;
+          } else if (currentVibe === 'neutral') {
+            targetIndex = Math.floor(group.length / 2);
+          } else if (currentVibe === 'bad') {
+            targetIndex = isDescending ? group.length - 1 : 0;
+          }
         }
 
         const target = group[targetIndex];
@@ -1182,7 +1349,76 @@
           clickedRadiosCount++;
         }
       }
-      addLog(`☑️ Clicked ${clickedRadiosCount} vibe-radios`, 'success');
+      if (clickedRadiosCount > 0) {
+        addLog(`☑️ Clicked ${clickedRadiosCount} vibe-radios`, 'success');
+      }
+      await sleep(400);
+
+      // ── 1b. Handle Select Dropdowns (for departments using select controls) ──
+      let clickedSelectsCount = 0;
+      const selectElements = Array.from(document.querySelectorAll('select'));
+      selectElements.forEach(select => {
+        const options = Array.from(select.options);
+        const validOptions = options.filter(opt => {
+          const val = opt.value || '';
+          const txt = (opt.innerText || '').toLowerCase();
+          return val !== '' && !txt.includes('select') && !txt.includes('choose');
+        });
+        
+        if (validOptions.length === 0) return;
+        
+        let targetOption = null;
+        if (validOptions.length === 2) {
+          const yesIndex = validOptions.findIndex(opt => {
+            const txt = (opt.innerText || opt.value || '').toLowerCase();
+            return txt.includes('yes') || txt.includes('agree') || txt.includes('y') || txt.includes('good');
+          });
+          if (currentVibe === 'good') {
+            targetOption = yesIndex >= 0 ? validOptions[yesIndex] : validOptions[0];
+          } else if (currentVibe === 'neutral') {
+            targetOption = validOptions[0];
+          } else if (currentVibe === 'bad') {
+            const noIndex = yesIndex >= 0 ? (yesIndex === 0 ? 1 : 0) : 1;
+            targetOption = validOptions[noIndex];
+          }
+        } else {
+          const firstTxt = (validOptions[0].innerText || validOptions[0].value || '').toLowerCase();
+          const isWorstFirst = firstTxt.includes('poor') || 
+                               firstTxt.includes('disagree') || 
+                               firstTxt.includes('bad') || 
+                               firstTxt.includes('unsatisfactory') || 
+                               firstTxt.includes('1') || 
+                               firstTxt.includes('no');
+                               
+          const isBestFirst = firstTxt.includes('excellent') || 
+                              firstTxt.includes('agree') || 
+                              firstTxt.includes('good') || 
+                              firstTxt.includes('satisfactory') || 
+                              firstTxt.includes('5') || 
+                              firstTxt.includes('yes');
+          
+          let isDescending = isBestFirst && !isWorstFirst;
+          
+          let targetIndex = 0;
+          if (currentVibe === 'good') {
+            targetIndex = isDescending ? 0 : validOptions.length - 1;
+          } else if (currentVibe === 'neutral') {
+            targetIndex = Math.floor(validOptions.length / 2);
+          } else if (currentVibe === 'bad') {
+            targetIndex = isDescending ? validOptions.length - 1 : 0;
+          }
+          targetOption = validOptions[targetIndex];
+        }
+        
+        if (targetOption) {
+          select.value = targetOption.value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+          clickedSelectsCount++;
+        }
+      });
+      if (clickedSelectsCount > 0) {
+        addLog(`☑️ Selected ${clickedSelectsCount} vibe-dropdowns`, 'success');
+      }
       await sleep(400);
 
       // ── 2. Adjust Sliders Safely ──
@@ -1207,13 +1443,32 @@
       await sleep(400);
 
       // ── 3. Fill Required/Visible Comments Safely ──
-      const comments = [
-        "The lectures were extremely helpful and detailed.",
-        "Good teaching methodology.",
-        "Clear explanations. No specific suggestions.",
-        "The pacing of the course was perfect.",
-        "Great interactions with students."
-      ];
+      const commentsMap = {
+        good: [
+          "The lectures were extremely helpful, well-structured, and clear.",
+          "Great interaction and methodology. Highly recommended course.",
+          "Excellent support and informative study materials.",
+          "Engaging sessions with perfect pacing and clear explanations.",
+          "Outstanding instruction with great examples and practical learning."
+        ],
+        neutral: [
+          "Satisfactory teaching. The course coverage was fine.",
+          "Average presentation style. Standard lectures.",
+          "Course delivery is okay and pacing is reasonable.",
+          "No specific suggestions. The topics were covered properly.",
+          "Standard instruction quality. Interaction was decent."
+        ],
+        bad: [
+          "Needs better time management and pacing of topics.",
+          "Very dry explanation. Mostly reading from ppt slides.",
+          "Difficult to follow the lectures. Concepts need more detail.",
+          "Lack of student engagement and interaction in classes.",
+          "Material could be better explained and organized."
+        ]
+      };
+      const comments = commentsMap[currentVibe] || commentsMap.good;
+      const finalComment = currentVibe === 'custom' ? (store.customRemarks || '') : comments[Math.floor(Math.random() * comments.length)];
+      
       let filledComment = false;
       document.querySelectorAll('textarea, input[type="text"]').forEach(el => {
         const style = window.getComputedStyle(el);
@@ -1223,7 +1478,7 @@
           // Skip general non-required short inputs (honeypot protection)
           if (el.tagName.toLowerCase() === 'input' && el.type === 'text' && !el.required) return;
           
-          fillInputSafely(el, comments[Math.floor(Math.random() * comments.length)]);
+          fillInputSafely(el, finalComment);
           filledComment = true;
         }
       });

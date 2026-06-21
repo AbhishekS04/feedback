@@ -11,13 +11,24 @@ const DELAY_AFTER_ERROR_MS  = 3000;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+async function launchBrowser(launchOptions) {
+  try {
+    return await chromium.launch(launchOptions);
+  } catch (err) {
+    if (err.message.includes('Executable doesn') || err.message.includes('looks like Playwright was just installed') || err.message.includes('npm install playwright')) {
+      throw new Error('Chromium browser binaries not found!\n  👉 Please run: npx playwright install chromium');
+    }
+    throw err;
+  }
+}
+
 async function gotoSafe(page, url) {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
   await sleep(DELAY_AFTER_NAV_MS);
 }
 
-async function fillAndSubmitForm(page, vibe = 'good') {
+async function fillAndSubmitForm(page, vibe = 'good', customComment = '') {
   if (!page.url().includes('give-feedback')) {
     throw new Error(`Not on feedback page — at: ${page.url()}`);
   }
@@ -30,7 +41,7 @@ async function fillAndSubmitForm(page, vibe = 'good') {
     let method = 'none';
     let count = 0;
     
-    // Group radios by name for logical selection
+    // 1. Group radios by name for logical selection
     const allRadios = Array.from(document.querySelectorAll('input[type="radio"]'));
     const groups = {};
     allRadios.forEach(r => {
@@ -43,14 +54,65 @@ async function fillAndSubmitForm(page, vibe = 'good') {
         if (group.length === 0) continue;
         
         let targetIndex = 0;
-        if (currentVibe === 'good') {
-            const y = group.findIndex(r => r.value.toLowerCase() === 'y');
-            targetIndex = y >= 0 ? y : 0;
-        } else if (currentVibe === 'neutral') {
-            targetIndex = Math.floor(group.length / 2);
-        } else if (currentVibe === 'bad') {
-            const n = group.findIndex(r => r.value.toLowerCase() === 'n');
-            targetIndex = n >= 0 ? n : group.length - 1;
+        if (group.length === 2) {
+            // Yes/No radio group
+            const yesIndex = group.findIndex(r => {
+                const val = (r.value || '').toLowerCase();
+                let labelText = '';
+                if (r.id) {
+                    const label = document.querySelector(`label[for="${r.id}"]`);
+                    if (label) labelText = label.innerText.toLowerCase();
+                }
+                return val === 'y' || val.includes('yes') || val.includes('agree') || labelText.includes('yes') || labelText.includes('agree');
+            });
+            
+            if (currentVibe === 'good') {
+                targetIndex = yesIndex >= 0 ? yesIndex : 0;
+            } else if (currentVibe === 'neutral') {
+                targetIndex = 0;
+            } else if (currentVibe === 'bad') {
+                targetIndex = yesIndex >= 0 ? (yesIndex === 0 ? 1 : 0) : 1;
+            }
+        } else {
+            // Likert scale (e.g. 5 options or 3 options)
+            const firstVal = (group[0].value || '').toLowerCase();
+            let firstLabel = '';
+            if (group[0].id) {
+                const label = document.querySelector(`label[for="${group[0].id}"]`);
+                if (label) firstLabel = label.innerText.toLowerCase();
+            }
+            
+            const isWorstFirst = firstVal.includes('poor') || 
+                                 firstVal.includes('disagree') || 
+                                 firstVal.includes('bad') || 
+                                 firstVal.includes('unsatisfactory') || 
+                                 firstVal.includes('1') || 
+                                 firstVal === 'n' ||
+                                 firstLabel.includes('poor') || 
+                                 firstLabel.includes('disagree') || 
+                                 firstLabel.includes('bad') || 
+                                 firstLabel.includes('strongly disagree');
+                                 
+            const isBestFirst = firstVal.includes('excellent') || 
+                                firstVal.includes('agree') || 
+                                firstVal.includes('good') || 
+                                firstVal.includes('satisfactory') || 
+                                firstVal.includes('5') || 
+                                firstVal === 'y' ||
+                                firstLabel.includes('excellent') || 
+                                firstLabel.includes('agree') || 
+                                firstLabel.includes('good') || 
+                                firstLabel.includes('strongly agree');
+                                
+            let isDescending = isBestFirst && !isWorstFirst; // best option is listed first
+            
+            if (currentVibe === 'good') {
+                targetIndex = isDescending ? 0 : group.length - 1;
+            } else if (currentVibe === 'neutral') {
+                targetIndex = Math.floor(group.length / 2);
+            } else if (currentVibe === 'bad') {
+                targetIndex = isDescending ? group.length - 1 : 0;
+            }
         }
 
         const target = group[targetIndex];
@@ -61,7 +123,69 @@ async function fillAndSubmitForm(page, vibe = 'good') {
         }
     }
     
-    if (count > 0) method = 'vibe-group';
+    // 2. Handle select dropdowns dynamically (for departments using dropdown forms)
+    const selectElements = Array.from(document.querySelectorAll('select'));
+    selectElements.forEach(select => {
+        const options = Array.from(select.options);
+        const validOptions = options.filter(opt => {
+            const val = opt.value || '';
+            const txt = (opt.innerText || '').toLowerCase();
+            return val !== '' && !txt.includes('select') && !txt.includes('choose');
+        });
+        
+        if (validOptions.length === 0) return;
+        
+        let targetOption = null;
+        if (validOptions.length === 2) {
+            const yesIndex = validOptions.findIndex(opt => {
+                const txt = (opt.innerText || opt.value || '').toLowerCase();
+                return txt.includes('yes') || txt.includes('agree') || txt.includes('y') || txt.includes('good');
+            });
+            if (currentVibe === 'good') {
+                targetOption = yesIndex >= 0 ? validOptions[yesIndex] : validOptions[0];
+            } else if (currentVibe === 'neutral') {
+                targetOption = validOptions[0];
+            } else if (currentVibe === 'bad') {
+                const noIndex = yesIndex >= 0 ? (yesIndex === 0 ? 1 : 0) : 1;
+                targetOption = validOptions[noIndex];
+            }
+        } else {
+            const firstTxt = (validOptions[0].innerText || validOptions[0].value || '').toLowerCase();
+            const isWorstFirst = firstTxt.includes('poor') || 
+                                 firstTxt.includes('disagree') || 
+                                 firstTxt.includes('bad') || 
+                                 firstTxt.includes('unsatisfactory') || 
+                                 firstTxt.includes('1') || 
+                                 firstTxt.includes('no');
+                                 
+            const isBestFirst = firstTxt.includes('excellent') || 
+                                firstTxt.includes('agree') || 
+                                firstTxt.includes('good') || 
+                                firstTxt.includes('satisfactory') || 
+                                firstTxt.includes('5') || 
+                                firstTxt.includes('yes');
+            
+            let isDescending = isBestFirst && !isWorstFirst;
+            
+            let targetIndex = 0;
+            if (currentVibe === 'good') {
+                targetIndex = isDescending ? 0 : validOptions.length - 1;
+            } else if (currentVibe === 'neutral') {
+                targetIndex = Math.floor(validOptions.length / 2);
+            } else if (currentVibe === 'bad') {
+                targetIndex = isDescending ? validOptions.length - 1 : 0;
+            }
+            targetOption = validOptions[targetIndex];
+        }
+        
+        if (targetOption) {
+            select.value = targetOption.value;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            count++;
+        }
+    });
+    
+    if (count > 0) method = 'vibe-adaptive';
     return { method, count };
   }, vibe);
 
@@ -82,22 +206,41 @@ async function fillAndSubmitForm(page, vibe = 'good') {
   }, vibe);
 
   // Mandatory Smart Comments (only active on 'required' text fields)
-  await page.evaluate(() => {
-    const comments = [
-        "The lectures were extremely helpful and detailed.",
-        "Good teaching methodology.",
-        "Clear explanations. No specific suggestions.",
-        "The pacing of the course was perfect.",
-        "Great interactions with students."
-    ];
+  await page.evaluate(({ currentVibe, custom }) => {
+    const commentsMap = {
+      good: [
+        "The lectures were extremely helpful, well-structured, and clear.",
+        "Great interaction and methodology. Highly recommended course.",
+        "Excellent support and informative study materials.",
+        "Engaging sessions with perfect pacing and clear explanations.",
+        "Outstanding instruction with great examples and practical learning."
+      ],
+      neutral: [
+        "Satisfactory teaching. The course coverage was fine.",
+        "Average presentation style. Standard lectures.",
+        "Course delivery is okay and pacing is reasonable.",
+        "No specific suggestions. The topics were covered properly.",
+        "Standard instruction quality. Interaction was decent."
+      ],
+      bad: [
+        "Needs better time management and pacing of topics.",
+        "Very dry explanation. Mostly reading from ppt slides.",
+        "Difficult to follow the lectures. Concepts need more detail.",
+        "Lack of student engagement and interaction in classes.",
+        "Material could be better explained and organized."
+      ]
+    };
+    const list = commentsMap[currentVibe] || commentsMap.good;
+    const finalComment = custom || list[Math.floor(Math.random() * list.length)];
+
     document.querySelectorAll('textarea, input[type="text"]').forEach(el => {
         if (el.required || el.getAttribute('required') !== null || el.classList.contains('required')) {
-            el.value = comments[Math.floor(Math.random() * comments.length)];
+            el.value = finalComment;
             el.dispatchEvent(new Event('input', { bubbles: true }));
             el.dispatchEvent(new Event('change', { bubbles: true }));
         }
     });
-  });
+  }, { currentVibe: vibe, custom: customComment });
 
   const submitSel = 'button[type="submit"], button.btn-primary, input[type="submit"]';
   await page.waitForSelector(submitSel, { timeout: 10000 });
@@ -126,7 +269,7 @@ export async function loginAndScan({ studentId, password, headless = false, onSt
     }
   }
 
-  const browser = await chromium.launch(launchOptions);
+  const browser = await launchBrowser(launchOptions);
   const context = await browser.newContext();
   const page    = await context.newPage();
 
@@ -144,8 +287,20 @@ export async function loginAndScan({ studentId, password, headless = false, onSt
   await sleep(3000);
 
   if (page.url().includes('login')) {
+    let loginErrorMsg = '';
+    try {
+      loginErrorMsg = await page.evaluate(() => {
+        const errorEl = document.querySelector('.alert-danger, .alert, .error, [class*="error" i], [class*="alert" i]');
+        return errorEl ? errorEl.innerText.trim() : '';
+      });
+    } catch (_) {}
+    
     await browser.close();
-    throw new Error('Login failed — please check your Student ID and Password');
+    if (loginErrorMsg) {
+      throw new Error(`Login failed — ${loginErrorMsg}`);
+    } else {
+      throw new Error('Login failed — please check your Student ID and Password');
+    }
   }
 
   if (!page.url().includes('dashboard')) {
@@ -281,8 +436,16 @@ export async function runSubmissions({ browser, page, vibe = 'good', onEvent = (
         if (!page.url().includes('give-feedback')) {
           throw new Error(`Redirected away: ${page.url()}`);
         }
-        const currentVibe = typeof vibe === 'object' ? (vibe[baseName] || 'good') : vibe;
-        await fillAndSubmitForm(page, currentVibe);
+        const currentVibeVal = typeof vibe === 'object' ? (vibe[baseName] || 'good') : vibe;
+        let currentVibe = 'good';
+        let currentCustom = '';
+        if (typeof currentVibeVal === 'object' && currentVibeVal !== null) {
+          currentVibe = currentVibeVal.type || 'good';
+          currentCustom = currentVibeVal.comment || '';
+        } else {
+          currentVibe = currentVibeVal;
+        }
+        await fillAndSubmitForm(page, currentVibe, currentCustom);
         totalSuccess++;
         subjectSuccess++;
         onEvent({ type: 'feedback_success', n: inner, subject: baseName, date, totalSuccess });
@@ -349,7 +512,7 @@ export async function forceSyncAttendance({ studentId, password, headless = fals
     }
   }
 
-  const browser = await chromium.launch(launchOptions);
+  const browser = await launchBrowser(launchOptions);
   const context = await browser.newContext();
   const page    = await context.newPage();
 
@@ -465,7 +628,7 @@ export async function fetchAttendanceStats({ studentId, password, headless = fal
     }
   }
 
-  const browser = await chromium.launch(launchOptions);
+  const browser = await launchBrowser(launchOptions);
   const context = await browser.newContext();
   const page    = await context.newPage();
 
